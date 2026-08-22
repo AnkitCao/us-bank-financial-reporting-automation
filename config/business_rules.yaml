@@ -1,5 +1,5 @@
 project:
-  name: Monthly LOB Financial Review
+  name: Three-Business FP&A Performance Dashboard
   currency: USD
   unit: millions
   actual_window:
@@ -57,7 +57,7 @@ exception_rules:
   expense_over_budget:
     threshold: 0.05
     severity: Yellow
-  credit_provision_over_forecast:
+  credit_provision_over_budget:
     threshold: 0.05
     severity: Yellow
   trailing_12m_low_margin:

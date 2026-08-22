@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import sys
 from html import escape
 from pathlib import Path
@@ -18,11 +19,12 @@ from src.clean_data import profile_raw_sources
 
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 LOGO_PATH = Path(__file__).resolve().parents[1] / "assets" / "us-bank-logo.svg"
+LOGO_DATA_URI = "data:image/svg+xml;base64," + base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
 
 
 @st.cache_data
 def load_source_tables() -> list[tuple[str, str, pd.DataFrame]]:
-    """Load every row and column from the three raw source workbooks."""
+    """Load source workbooks while omitting forecast rows from the interview view."""
     commercial_banking = pd.read_excel(RAW_DIR / "commercial_banking_monthly.xlsx", sheet_name="Monthly Detail")
     commercial_real_estate = pd.read_excel(RAW_DIR / "commercial_real_estate_monthly.xlsx", sheet_name="CRE Monthly")
 
@@ -37,11 +39,28 @@ def load_source_tables() -> list[tuple[str, str, pd.DataFrame]]:
     )
     capital_markets.insert(0, "Source Metric", capital_markets.pop("Source Metric"))
 
+    commercial_banking = commercial_banking.loc[
+        commercial_banking["Plan Type"].astype(str).str.strip().str.lower() != "forecast"
+    ].copy()
+    commercial_real_estate = commercial_real_estate.loc[
+        commercial_real_estate["Plan Case"].astype(str).str.strip().str.lower() != "forecast"
+    ].copy()
+    capital_markets = capital_markets.loc[
+        capital_markets["Plan Scenario"].astype(str).str.strip().str.lower() != "forecast"
+    ].copy()
+
     return [
         ("Commercial Banking", "commercial_banking_monthly.xlsx", commercial_banking),
         ("Commercial Real Estate", "commercial_real_estate_monthly.xlsx", commercial_real_estate),
         ("Capital Markets", "capital_markets_monthly.xlsx", capital_markets),
     ]
+
+
+MISSING_FIX = "Sort by month; impute from adjacent months within the same metric and scenario; stop if blanks remain."
+DUPLICATE_FIX = "Drop rows only when every field matches; stop if the same business key has different values."
+LABEL_FIX = "Trim spaces, convert to lowercase, then map to Actual, Budget or Prior Year."
+OUTLIER_FIX = "Range = [Q1 − 1.5×IQR, Q3 + 1.5×IQR]; LLM confirms flags, then impute from adjacent months."
+ALIAS_FIX = "Normalize header case, spaces and punctuation; apply only approved source-to-standard mappings."
 
 
 SOURCE_PROFILES = {
@@ -50,10 +69,10 @@ SOURCE_PROFILES = {
         "grain": "One row for each month",
         "coverage": "Apr 2025 - Jun 2026",
         "note": "Text dates, inconsistent labels, missing values, a duplicate record and an extreme value require cleaning.",
-        "method": "Map approved column aliases, trim labels, parse month-end dates, remove exact duplicate rows, flag same-group median/MAD outliers, and interpolate only within the same metric and scenario.",
+        "method": "Map approved column aliases, trim labels, parse month-end dates, remove exact duplicate rows, flag same-group IQR outliers, and impute only within the same metric and scenario.",
         "fields": [
             ("Key", "Reporting Date", "Month covered by the record."),
-            ("Key", "Plan Type", "Comparison case: Actual, Budget, Forecast or Prior Year."),
+            ("Key", "Plan Type", "Comparison case: Actual, Budget or Prior Year."),
             ("Revenue", "Loan Interest", "Interest income from commercial loans."),
             ("Revenue", "Treasury Fee", "Treasury-service fees."),
             ("Revenue", "Deposit Fee", "Deposit-service fees."),
@@ -69,11 +88,11 @@ SOURCE_PROFILES = {
         "guardrails": "Loan Balance and Deposit Balance show operating scale; they are monitored but excluded from revenue and profit sums.",
         "guardrail_metrics": "Loan Balance; Deposit Balance",
         "issue_evidence": [
-            ("Missing Values", "Value_MM (financial value)", "8 cells", "Fill by month within the same measure and plan type."),
-            ("Duplicate Rows", "All columns; key: Date + Measure + Plan", "12 rows", "Remove identical rows; reject conflicting keys."),
-            ("Inconsistent Labels", "Plan Type and Measure Name", "9 labels", "Trim spaces and map labels to approved names."),
-            ("Extreme Values", "Value_MM (financial value)", "5 values", "Flag outside the same-group robust range, then interpolate."),
-            ("Column Aliases", "All source headers", "5 headers", "Rename source headers to standard dashboard fields."),
+            ("Missing Values", "Value_MM (financial value)", "Merchant Fee, Budget, May 2025 = blank; Operating Expense, Actual, Oct 2025 = blank", "8 cells", MISSING_FIX),
+            ("Duplicate Rows", "All columns; key: Date + Measure + Plan", "Operating Expense, Actual, Apr 2025, 3.881 appears twice", "12 rows", DUPLICATE_FIX),
+            ("Inconsistent Labels", "Plan Type and Measure Name", "` budget ` → `Budget`; `prior year ` → `Prior Year`; `Treasury Fee ` → `Treasury Fee`", "9 labels", LABEL_FIX),
+            ("Extreme Values", "Value_MM (financial value)", "Treasury Fee 48.720 vs. IQR fence 1.172–3.715; FX Fee 9.640 vs. IQR fence 0.243–0.761", "5 values", OUTLIER_FIX),
+            ("Column Aliases", "All source headers", "Reporting Date → period; Measure Name → source_metric; Plan Type → scenario; Value_MM → amount_millions", "5 headers", ALIAS_FIX),
         ],
     },
     "Commercial Real Estate": {
@@ -81,10 +100,10 @@ SOURCE_PROFILES = {
         "grain": "One row for each month and reporting case",
         "coverage": "Apr 2025 - Jun 2026",
         "note": "Wide structure, missing values, a duplicate row, an extreme cost value and inconsistent case labels require cleaning.",
-        "method": "Map approved aliases, standardize cases, unpivot metric columns, remove exact duplicates, flag same-group median/MAD outliers, and interpolate only within the same metric and scenario.",
+        "method": "Map approved aliases, standardize cases, unpivot metric columns, remove exact duplicates, flag same-group IQR outliers, and impute only within the same metric and scenario.",
         "fields": [
             ("Key", "Report Month", "Month covered by the record."),
-            ("Key", "Plan Case", "Comparison case: Actual, Budget, Forecast or Prior Year."),
+            ("Key", "Plan Case", "Comparison case: Actual, Budget or Prior Year."),
             ("Revenue", "Net Interest Income", "Interest income from CRE loans."),
             ("Revenue", "Origination Fees", "New-loan origination fees."),
             ("Revenue", "Prepayment Fees", "Early-repayment fees."),
@@ -101,11 +120,11 @@ SOURCE_PROFILES = {
         "guardrails": "CRE Loan Balance and NPL Proxy explain scale and credit quality, but are balance measures—not revenue.",
         "guardrail_metrics": "CRE Loan Balance; NPL Proxy",
         "issue_evidence": [
-            ("Missing Values", "Prepayment Fees and Net Interest Income", "2 cells", "Fill by month within the same metric and plan case."),
-            ("Duplicate Rows", "All columns; key: Month + Plan Case", "3 rows", "Remove identical rows; reject conflicting keys."),
-            ("Inconsistent Labels", "Plan Case", "2 labels", "Trim spaces and map labels to approved names."),
-            ("Extreme Values", "Operating Costs and Origination Fees", "2 values", "Flag outside the same-group robust range, then interpolate."),
-            ("Column Aliases", "Source headers", "6 headers", "Rename source headers to standard dashboard fields."),
+            ("Missing Values", "Prepayment Fees and Net Interest Income", "Prepayment Fees, Actual, Jun 2025 = blank; Net Interest Income, Budget, Sep 2025 = blank", "2 cells", MISSING_FIX),
+            ("Duplicate Rows", "All columns; key: Month + Plan Case", "Jul 2025, Actual row appears twice; all 11 columns match", "3 rows", DUPLICATE_FIX),
+            ("Inconsistent Labels", "Plan Case", "` budget ` → `Budget`; surrounding spaces are removed", "2 labels", LABEL_FIX),
+            ("Extreme Values", "Operating Costs and Origination Fees", "Operating Costs 32.085 vs. IQR fence 1.063–3.295; Origination Fees 13.356 vs. IQR fence 0.364–1.142", "2 values", OUTLIER_FIX),
+            ("Column Aliases", "Source headers", "Report Month → period; Plan Case → scenario; Net Interest Income → NII; Operating Costs → Opex", "6 headers", ALIAS_FIX),
         ],
     },
     "Capital Markets": {
@@ -113,9 +132,9 @@ SOURCE_PROFILES = {
         "grain": "One row for each source metric and scenario",
         "coverage": "Apr 2025 - Jun 2026",
         "note": "A missing value, duplicate scenario, extreme value, inconsistent label and month columns require cleaning.",
-        "method": "Combine six sheets, standardize scenarios and month headers, unpivot months, remove exact duplicates, flag same-group median/MAD outliers, and interpolate only within the same metric and scenario.",
+        "method": "Combine six sheets, standardize scenarios and month headers, unpivot months, remove exact duplicates, flag same-group IQR outliers, and impute only within the same metric and scenario.",
         "fields": [
-            ("Key", "Plan Scenario", "Comparison case: Actual, Budget, Forecast or Prior Year."),
+            ("Key", "Plan Scenario", "Comparison case: Actual, Budget or Prior Year."),
             ("Revenue", "Advisory Fee", "Advisory transaction fees."),
             ("Revenue", "Underwriting Revenue", "Securities-underwriting income."),
             ("Revenue", "Trading Revenue", "Client and market trading income."),
@@ -129,11 +148,11 @@ SOURCE_PROFILES = {
         "guardrails": "Fee and trading worksheets map only to Revenue; the expense worksheet maps only to Expense.",
         "guardrail_metrics": "Fee and Trading Revenue; Operating Expense",
         "issue_evidence": [
-            ("Missing Values", "Advisory Fee (May-25); Underwriting Revenue (Oct-25)", "2 cells", "Fill by month within the same metric and scenario."),
-            ("Duplicate Rows", "Key: Metric + Scenario + Month", "2 rows", "Remove identical rows; reject conflicting keys."),
-            ("Inconsistent Labels", "Plan Scenario", "2 labels", "Trim spaces and map labels to approved names."),
-            ("Extreme Values", "Trading Revenue (Sep-25); Operating Expense (Dec-25)", "2 values", "Flag outside the same-group robust range, then interpolate."),
-            ("Column Aliases", "Plan Scenario and month headers", "2 headers", "Rename standard fields, then convert months into rows."),
+            ("Missing Values", "Advisory Fee (May-25); Underwriting Revenue (Oct-25)", "Advisory Fee, Budget, May 2025 = blank; Underwriting Revenue, Prior Year, Oct 2025 = blank", "2 cells", MISSING_FIX),
+            ("Duplicate Rows", "Key: Metric + Scenario + Month", "Syndication Fee, Budget row and Operating Expense, Actual row each appear twice", "2 rows", DUPLICATE_FIX),
+            ("Inconsistent Labels", "Plan Scenario", "` prior year ` → `Prior Year`; surrounding spaces are removed", "2 labels", LABEL_FIX),
+            ("Extreme Values", "Trading Revenue (Sep-25); Operating Expense (Dec-25)", "Trading Revenue 35.020 vs. IQR fence 0.843–2.933; Operating Expense 57.792 vs. IQR fence 1.527–5.222", "2 values", OUTLIER_FIX),
+            ("Column Aliases", "Plan Scenario and month headers", "Plan Scenario → scenario; Apr_25 → Apr-25, then month columns → period rows", "2 headers", ALIAS_FIX),
         ],
     },
 }
@@ -142,7 +161,7 @@ SOURCE_PROFILES = {
 def _field_range_and_stats(table: pd.DataFrame, field: str) -> tuple[str, str]:
     """Describe raw content and calculate raw numeric statistics for a source field."""
     if field in {"Plan Type", "Plan Case", "Plan Scenario"}:
-        return "-", "N/A"
+        return "N/A", "N/A"
     if field in table.columns:
         series = table[field]
     else:
@@ -190,9 +209,9 @@ def source_profile_html(business_unit: str, table: pd.DataFrame, quality: pd.Ser
             f"<td>{escape(content_range)}</td><td>{escape(statistics)}</td></tr>"
         )
     issue_rows = "".join(
-        f"<tr><td><strong>{escape(issue)}</strong></td><td>{escape(columns)}</td>"
-        f"<td>{escape(count)}</td><td>{escape(resolution)}</td></tr>"
-        for issue, columns, count, resolution in profile["issue_evidence"]
+        f"<tr><td><strong>{escape(issue)}</strong></td><td>{escape(columns)}</td><td>{escape(count)}</td>"
+        f"<td>{escape(example)}</td><td>{escape(resolution)}</td></tr>"
+        for issue, columns, example, count, resolution in profile["issue_evidence"]
     )
     def metric_lines(value: str) -> str:
         return "<br>".join(escape(item.strip()) for item in value.split(";"))
@@ -224,7 +243,7 @@ def source_profile_html(business_unit: str, table: pd.DataFrame, quality: pd.Ser
                 "Share of revenue from each Capital Markets activity.", "Monitor income concentration and diversification.",
             )
     metric_rows = [
-        ("Total Revenue", revenue_formula, "Income from all revenue fields.", "Track trends and compare Target, Forecast and Prior Year."),
+        ("Total Revenue", revenue_formula, "Income from all revenue fields.", "Track trends and compare Target and Prior Year."),
         (cost_defined, cost_formula, "Costs deducted from revenue.", "Track spending and budget variance."),
         ("Operating Profit", profit_formula, "Revenue remaining after costs.", "Track profit margin and business performance."),
         ("Cost-to-Income Ratio", f"= {efficiency_cost} ÷ Total Revenue", "Operating cost per dollar of revenue.", "Compare efficiency across businesses and periods."),
@@ -248,12 +267,12 @@ def source_profile_html(business_unit: str, table: pd.DataFrame, quality: pd.Ser
         <div class="profile-stat"><strong>{int(quality['problem_records'])} Issues Over {int(quality['rows'])} Rows ({quality['problem_rate']:.1%})</strong></div>
       </div>
       <div class="issue-title">Issues Table</div>
-      <div class="issue-table-wrap"><table class="issue-table"><thead><tr><th>Issue</th><th>Columns</th><th>Count</th><th>Fix</th></tr></thead><tbody>{issue_rows}</tbody></table></div>
+      <div class="issue-table-wrap"><table class="issue-table"><thead><tr><th>Issues</th><th>Columns</th><th>Counts</th><th>Examples</th><th>Fixes</th></tr></thead><tbody>{issue_rows}</tbody></table></div>
     </div>
     <div id="{section_slug}-important-columns" class="story-step section-anchor"><span>2</span><div><strong>Important Columns</strong></div></div>
-    <div class="profile-panel compact-panel field-table-wrap"><table class="field-table"><thead><tr><th>Category</th><th>Field</th><th>Meaning</th><th>Range</th><th>Average</th></tr></thead><tbody>{''.join(field_rows)}</tbody></table></div>
+    <div class="profile-panel compact-panel field-table-wrap"><table class="field-table"><thead><tr><th>Categories</th><th>Fields</th><th>Meanings</th><th>Ranges</th><th>Averages</th></tr></thead><tbody>{''.join(field_rows)}</tbody></table></div>
     <div id="{section_slug}-defined-metrics" class="story-step section-anchor"><span>3</span><div><strong>Defined Metrics</strong></div></div>
-    <div class="metric-table-wrap"><table class="metric-table"><thead><tr><th>Metric</th><th>Calculation</th><th>Meaning</th><th>Use</th></tr></thead><tbody>{metric_table_rows}</tbody></table></div>
+    <div class="metric-table-wrap"><table class="metric-table"><thead><tr><th>Metrics</th><th>Calculations</th><th>Meanings</th><th>Uses</th></tr></thead><tbody>{metric_table_rows}</tbody></table></div>
     """
 
 
@@ -269,6 +288,10 @@ st.markdown(
       h2 { font-size:2.75rem !important; font-weight:800 !important; margin:1.2rem 0 .55rem !important; padding:0 !important; line-height:1.08 !important; }
       p, .stCaption { font-size:1.18rem !important; line-height:1.6 !important; }
       .simulated-notice { background:#FFF1F2; border:2px solid #CF2A36; border-left:9px solid #CF2A36; border-radius:10px; padding:22px 26px; margin:1.5rem 0 .5rem; color:#701821; font-size:1.55rem; line-height:1.6; }
+      .brand-row { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:1.1rem; }
+      .brand-logo { width:220px; height:auto; display:block; }
+      .creator-credit { margin-left:auto; color:#334155; font-size:1.55rem; font-weight:700; white-space:nowrap; }
+      .creator-credit a { color:#001E79 !important; text-decoration:underline !important; }
       .source-meta { color:#465269; font-size:1.45rem; line-height:1.3; margin:.75rem 0 .65rem; }
       .story-step { display:flex; align-items:center; gap:14px; margin:2.1rem 0 1.45rem; color:#001E79; }
       .story-step > span { display:flex; align-items:center; justify-content:center; flex:0 0 50px; height:50px; border-radius:50%; background:#001E79; color:white; font-size:1.6rem; font-weight:800; }
@@ -285,7 +308,7 @@ st.markdown(
       .cleaning-note { background:#EDF8F4; border-left:5px solid #00A878; padding:14px 16px; margin:14px 0; font-size:1.15rem; line-height:1.55; }
       .issue-title { color:#001E79; font-size:2.15rem; font-weight:800; line-height:1.15; margin:1.3rem 0 .8rem; }
       .issue-table-wrap { overflow-x:auto; border:1px solid #F2CED1; border-radius:8px; }
-      .issue-table { width:100%; min-width:1250px; table-layout:fixed; border-collapse:collapse; margin:0 !important; color:#12213A; font-size:1.75rem; }
+      .issue-table { width:100%; min-width:1650px; table-layout:fixed; border-collapse:collapse; margin:0 !important; color:#12213A; font-size:1.75rem; }
       .issue-table th { box-sizing:border-box; background:#FF3B30; color:white; border:2px solid white; padding:18px 20px; text-align:center; font-size:1.9rem; white-space:nowrap; }
       .issue-table td { box-sizing:border-box; padding:18px 20px; border-bottom:1px solid #F2CED1; text-align:left; vertical-align:middle; line-height:1.4; }
       .issue-table tbody tr:nth-child(odd) { background:#FFF7F7; }
@@ -293,11 +316,13 @@ st.markdown(
       .issue-table tbody tr:last-child td { border-bottom:0; }
       .issue-table td:first-child { color:#12213A; font-weight:800; white-space:nowrap; }
       .issue-table td:nth-child(3) { color:#12213A; font-weight:400; text-align:center; white-space:nowrap; }
+      .issue-table td:nth-child(4) { color:#12213A; font-weight:400; }
       .issue-table td:last-child { color:#12213A; font-weight:800; }
-      .issue-table th:nth-child(1), .issue-table td:nth-child(1) { width:21%; }
-      .issue-table th:nth-child(2), .issue-table td:nth-child(2) { width:25%; }
-      .issue-table th:nth-child(3), .issue-table td:nth-child(3) { width:12%; }
-      .issue-table th:nth-child(4), .issue-table td:nth-child(4) { width:42%; }
+      .issue-table th:nth-child(1), .issue-table td:nth-child(1) { width:17%; }
+      .issue-table th:nth-child(2), .issue-table td:nth-child(2) { width:19%; }
+      .issue-table th:nth-child(3), .issue-table td:nth-child(3) { width:10%; }
+      .issue-table th:nth-child(4), .issue-table td:nth-child(4) { width:27%; }
+      .issue-table th:nth-child(5), .issue-table td:nth-child(5) { width:27%; }
       .field-title { color:#001E79; font-size:1.35rem; font-weight:800; margin:1rem 0 .7rem; }
       .field-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
       .field-item { border:1px solid #DCE2F3; border-radius:8px; padding:12px 14px; }
@@ -394,7 +419,14 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-st.image(str(LOGO_PATH), width=220)
+st.markdown(
+    f"<div class='brand-row'>"
+    f"<img class='brand-logo' src='{LOGO_DATA_URI}' alt='U.S. Bank logo'>"
+    "<div class='creator-credit'>Ziqi (Ankit) Cao &nbsp;·&nbsp; "
+    "<a href='https://www.linkedin.com/in/ziqi-ankit-cao' target='_blank' rel='noopener noreferrer'>LinkedIn</a></div>"
+    "</div>",
+    unsafe_allow_html=True,
+)
 st.title("Source Data for Three Businesses")
 st.markdown(
     """

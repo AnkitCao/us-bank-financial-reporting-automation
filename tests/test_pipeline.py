@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from src.calculate_kpis import build_monthly_kpis
-from src.clean_data import _finalize_ledger, clean_all_sources, profile_raw_sources, quality_rule_catalog
+from src.clean_data import _finalize_ledger, _require_columns, clean_all_sources, profile_raw_sources, quality_rule_catalog
 from src.detect_exceptions import detect_exceptions
 from src.generate_data import generate_raw_packages
 from src.map_financials import apply_financial_mapping
@@ -135,3 +135,9 @@ def test_conflicting_duplicate_keys_fail_instead_of_silent_selection():
 def test_quality_rules_are_explicit_and_complete():
     rules = quality_rule_catalog().set_index("issue_type")
     assert {"Column aliases", "Missing amounts", "Exact duplicates", "Extreme values"}.issubset(rules.index)
+
+
+def test_unresolved_required_fields_stop_cleaning():
+    """Unknown schemas must be quarantined rather than silently guessed."""
+    with pytest.raises(ValueError, match="Unresolved required fields"):
+        _require_columns(pd.DataFrame({"mystery": [1]}), ["period"], "new_file.xlsx")

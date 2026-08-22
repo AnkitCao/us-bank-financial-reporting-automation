@@ -1,8 +1,6 @@
 business_unit,period,rule,severity,metric,value,message
 Capital Markets,2026-06-30,Expense over budget,Yellow,Expense vs Budget,0.08002177463255308,Capital Markets expense exceeded budget by 8.0% in Jun 2026.
-Commercial Real Estate,2026-06-30,Credit provision over forecast,Yellow,Credit Provision vs Forecast,0.09490333919156424,Commercial Real Estate credit provision exceeded forecast by 9.5% in Jun 2026.
 Capital Markets,2026-05-31,Revenue recovery,Green,Revenue MoM,0.018546503640609835,Capital Markets returned to positive monthly growth in May 2026.
-Commercial Real Estate,2026-05-31,Credit provision over forecast,Yellow,Credit Provision vs Forecast,0.08918406072106248,Commercial Real Estate credit provision exceeded forecast by 8.9% in May 2026.
 Commercial Real Estate,2026-05-31,Trailing 12M low margin,Yellow,Profit Margin,0.6590854680392626,Commercial Real Estate reached its lowest trailing-window margin (65.9%) in May 2026.
 Capital Markets,2026-04-30,Three-month revenue decline,Red,Revenue MoM,-0.02190271432410651,Capital Markets recorded three consecutive monthly revenue declines through Apr 2026.
 Capital Markets,2026-03-31,Three-month revenue decline,Red,Revenue MoM,-0.053301106729423675,Capital Markets recorded three consecutive monthly revenue declines through Mar 2026.

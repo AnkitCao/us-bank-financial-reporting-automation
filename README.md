@@ -34,7 +34,7 @@ src/calculate_kpis.py → src/detect_exceptions.py
       ▼
 data/processed/*.csv
       ▼
-app/App.py → Monthly LOB Financial Review
+app/App.py → Automated Three-Business Performance Dashboard
 ```
 
 ## Quick start

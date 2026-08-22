@@ -33,8 +33,8 @@ def detect_exceptions(kpis: pd.DataFrame) -> pd.DataFrame:
                 alerts.append(_alert(business_unit, row["period"], "Revenue YoY decline", "Red", "Revenue YoY", row["revenue_yoy"], f"{business_unit} revenue declined {abs(row['revenue_yoy']):.1%} YoY in {period_label}."))
             if row["operating_expense_vs_budget"] > rules["expense_over_budget"]["threshold"]:
                 alerts.append(_alert(business_unit, row["period"], "Expense over budget", "Yellow", "Expense vs Budget", row["operating_expense_vs_budget"], f"{business_unit} expense exceeded budget by {row['operating_expense_vs_budget']:.1%} in {period_label}."))
-            if row["credit_provision_actual"] > 0 and row["credit_provision_vs_forecast"] > rules["credit_provision_over_forecast"]["threshold"]:
-                alerts.append(_alert(business_unit, row["period"], "Credit provision over forecast", "Yellow", "Credit Provision vs Forecast", row["credit_provision_vs_forecast"], f"{business_unit} credit provision exceeded forecast by {row['credit_provision_vs_forecast']:.1%} in {period_label}."))
+            if row["credit_provision_actual"] > 0 and row["credit_provision_vs_budget"] > rules["credit_provision_over_budget"]["threshold"]:
+                alerts.append(_alert(business_unit, row["period"], "Credit provision over budget", "Yellow", "Credit Provision vs. Budget", row["credit_provision_vs_budget"], f"{business_unit} credit provision exceeded budget by {row['credit_provision_vs_budget']:.1%} in {period_label}."))
 
             trailing = unit_frame.loc[:index, "profit_margin_actual"].tail(12)
             if len(trailing) >= 4 and row["profit_margin_actual"] <= trailing.min():

@@ -1,7 +1,9 @@
-"""Streamlit entry point for the Monthly LOB Financial Review."""
+"""Streamlit entry point for the Automated Three-Business Performance Dashboard."""
 
 from __future__ import annotations
 
+import base64
+import json
 import sys
 import textwrap
 from html import escape
@@ -16,9 +18,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.executive_summary import generate_executive_summary
-from src.paths import PROCESSED_DIR
+from src.paths import PROCESSED_DIR, RAW_DIR
 
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "us-bank-logo.svg"
+LOGO_DATA_URI = "data:image/svg+xml;base64," + base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
 
 COLORS = {
     "navy": "#0B1F3A",
@@ -49,9 +52,82 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return kpis, alerts, detail
 
 
+@st.cache_data
+def load_raw_source_evidence(start: pd.Timestamp, end: pd.Timestamp, units: tuple[str, ...]) -> list[dict]:
+    """Return selected source-workbook rows for LLM evidence; dashboard calculations still use clean data."""
+    rows: list[dict] = []
+    if "Commercial Banking" in units:
+        frame = pd.read_excel(RAW_DIR / "commercial_banking_monthly.xlsx", sheet_name="Monthly Detail")
+        dates = pd.to_datetime(frame["Reporting Date "], errors="coerce")
+        frame = frame.loc[dates.between(start, end)].copy()
+        frame = frame.loc[frame["Plan Type"].astype(str).str.strip().str.lower() != "forecast"]
+        frame.insert(0, "Business Unit", "Commercial Banking")
+        rows.extend(frame.to_dict("records"))
+    if "Commercial Real Estate" in units:
+        frame = pd.read_excel(RAW_DIR / "commercial_real_estate_monthly.xlsx", sheet_name="CRE Monthly")
+        dates = pd.to_datetime(frame["Report Month"], errors="coerce") + pd.offsets.MonthEnd(0)
+        frame = frame.loc[dates.between(start, end)].copy()
+        frame = frame.loc[frame["Plan Case"].astype(str).str.strip().str.lower() != "forecast"]
+        frame.insert(0, "Business Unit", "Commercial Real Estate")
+        rows.extend(frame.to_dict("records"))
+    if "Capital Markets" in units:
+        path = RAW_DIR / "capital_markets_monthly.xlsx"
+        for sheet in pd.ExcelFile(path).sheet_names:
+            frame = pd.read_excel(path, sheet_name=sheet)
+            frame = frame.loc[frame["Plan Scenario"].astype(str).str.strip().str.lower() != "forecast"]
+            selected_columns = ["Plan Scenario"]
+            for column in frame.columns[1:]:
+                parsed = pd.to_datetime(str(column).replace("_", "-"), format="%b-%y", errors="coerce")
+                if pd.notna(parsed) and start.to_period("M") <= parsed.to_period("M") <= end.to_period("M"):
+                    selected_columns.append(column)
+            if len(selected_columns) > 1:
+                subset = frame[selected_columns].copy()
+                subset.insert(0, "Source Metric", sheet)
+                subset.insert(0, "Business Unit", "Capital Markets")
+                rows.extend(subset.to_dict("records"))
+    return rows
+
+
+def attach_evidence(metrics: dict, raw_rows: list[dict], calculation_rows: pd.DataFrame | None = None) -> dict:
+    """Attach compact numerical evidence so the LLM analyzes data instead of paraphrasing prose."""
+    evidence = dict(metrics)
+    evidence["raw_source_records"] = raw_rows
+    if calculation_rows is not None and not calculation_rows.empty:
+        columns = [
+            column for column in (
+                "business_unit", "period", "source_metric", "management_category", "metric_type",
+                "actual", "budget", "prior_year", "variance_to_budget",
+            ) if column in calculation_rows.columns
+        ]
+        prepared = calculation_rows[columns].copy()
+        if "period" in prepared:
+            prepared["period"] = prepared["period"].dt.strftime("%Y-%m-%d")
+        evidence["calculation_records"] = prepared.to_dict("records")
+    return evidence
+
+
+def dataframe_records(frame: pd.DataFrame) -> list[dict]:
+    """Convert a filtered analytical frame into JSON-safe records for LLM review."""
+    prepared = frame.copy()
+    for column in prepared.select_dtypes(include=["datetime", "datetimetz"]).columns:
+        prepared[column] = prepared[column].dt.strftime("%Y-%m-%d")
+    return prepared.where(pd.notna(prepared), None).to_dict("records")
+
+
 def fmt_money(value: float) -> str:
     """Format a USD millions value for executive display."""
     return f"${value:,.1f}M"
+
+
+def format_chart_period_range(frame: pd.DataFrame) -> str:
+    """Return a concise month or month range for chart subtitles."""
+    periods = pd.to_datetime(frame["period"], errors="coerce").dropna()
+    if periods.empty:
+        return ""
+    start, end = periods.min(), periods.max()
+    if start.to_period("M") == end.to_period("M"):
+        return end.strftime("%B %Y")
+    return f"{start.strftime('%b %Y')} - {end.strftime('%b %Y')}"
 
 
 def local_chart_summary(chart_key: str, values: dict) -> str:
@@ -77,7 +153,7 @@ def local_chart_summary(chart_key: str, values: dict) -> str:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def generate_chart_summary(chart_key: str, summary_dict: dict) -> str:
-    """Summarize precomputed KPI values without exposing source-level data."""
+    """Choose the most decision-relevant finding from the chart's filtered data."""
     fallback = local_chart_summary(chart_key, summary_dict)
     try:
         api_key = st.secrets["OPENAI_API_KEY"]
@@ -89,10 +165,67 @@ def generate_chart_summary(chart_key: str, summary_dict: dict) -> str:
         client = OpenAI(api_key=api_key)
         response = client.responses.create(
             model=st.secrets.get("OPENAI_MODEL", "gpt-5-mini"),
-            instructions="Write one concise, factual sentence for a CFO briefing. Do not add facts or recommendations.",
-            input=f"Chart: {chart_key}. Precomputed KPI summary: {summary_dict}",
+            instructions=(
+                "Analyze all supplied records for this chart and choose its most decision-relevant pattern; do not follow a fixed sentence "
+                "template. Compare levels, period changes, target or budget gaps, and business differences where available. Write exactly one "
+                "concise factual CFO sentence. Treat calculated clean metrics as authoritative when raw rows contain deliberate quality issues. "
+                "Use only supplied facts; do not recommend actions or describe your process."
+            ),
+            input=json.dumps({"chart": chart_key, "filtered_data": summary_dict}, default=str),
+            store=False,
         )
         return response.output_text.strip() or fallback
+    except Exception:
+        return fallback
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_reviews: list[dict]) -> dict:
+    """Let the LLM select period-specific executive insights from all filtered evidence."""
+    fallback = {"executive_summary": fallback_summary, "business_reviews": fallback_reviews}
+    try:
+        api_key = st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        return fallback
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        response = client.responses.create(
+            model=st.secrets.get("OPENAI_MODEL", "gpt-5-mini"),
+            instructions=(
+                "Act as a CFO reviewing one selected reporting period. Analyze every supplied raw record, clean monthly KPI record, calculated "
+                "metric record, and deterministic rule alert. Decide what is genuinely most material for this period; do not always choose the "
+                "same metrics or reuse a fixed template. Consider target gaps, expense pressure, trend reversals, margin, cost-to-income, NPL, "
+                "loan-to-deposit, fee concentration, and alert persistence. Return JSON only with: "
+                '{"executive_summary":"exactly two short factual sentences","business_reviews":['
+                '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive",'
+                '"label":"2-5 word finding","message":"one concise factual sentence"}]}. '
+                "Select the two most decision-relevant period findings for the executive summary. Return exactly one review for each supplied "
+                "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. Preserve all "
+                "numbers and periods exactly; never invent thresholds, causes, or recommendations."
+            ),
+            input=json.dumps(facts, default=str),
+            store=False,
+        )
+        parsed = json.loads(response.output_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip())
+        allowed_units = set(facts["selected_business_units"])
+        reviews = []
+        seen = set()
+        for item in parsed.get("business_reviews", []):
+            unit = str(item.get("business_unit", ""))
+            status = str(item.get("status", ""))
+            if unit not in allowed_units or unit in seen or status not in {"Critical", "Caution", "Positive"}:
+                continue
+            label = " ".join(str(item.get("label", "")).split())
+            message = " ".join(str(item.get("message", "")).split())
+            if label and message:
+                reviews.append({"business_unit": unit, "status": status, "label": label, "message": message})
+                seen.add(unit)
+        summary = " ".join(str(parsed.get("executive_summary", "")).split())
+        if not summary or seen != allowed_units:
+            return fallback
+        return {"executive_summary": summary, "business_reviews": reviews}
     except Exception:
         return fallback
 
@@ -161,7 +294,7 @@ def trend_chart(kpis: pd.DataFrame, selected_units: list[str]) -> go.Figure:
         )
     fig.update_yaxes(title="Revenue ($M)")
     fig.update_layout(showlegend=True)
-    return base_layout(fig, "Revenue Trend", "Monthly revenue trend, synthetic data in USD millions")
+    return base_layout(fig, "Revenue Trend", f"= Sum of Revenue Metrics, {format_chart_period_range(kpis)}")
 
 
 def cost_income_trend_chart(kpis: pd.DataFrame, selected_units: list[str]) -> go.Figure:
@@ -176,29 +309,31 @@ def cost_income_trend_chart(kpis: pd.DataFrame, selected_units: list[str]) -> go
         ))
     fig.update_yaxes(title="Cost / Income", tickformat=".0%", rangemode="tozero")
     fig.update_layout(showlegend=True)
-    return base_layout(fig, "Cost to Income Ratio", "Lower ratios indicate greater operating efficiency")
+    return base_layout(fig, "Cost to Income Ratio", f"= Operating Expense ÷ Total Revenue, {format_chart_period_range(kpis)}")
 
 
-def profit_margin_comparison_chart(current_month: pd.DataFrame, period_label: str) -> go.Figure:
-    """Compare latest actual and target profit margins by business unit."""
-    frame = current_month.copy()
+def profit_margin_comparison_chart(period_frame: pd.DataFrame, period_label: str) -> go.Figure:
+    """Compare actual and target profit margins for the selected period."""
+    frame = period_frame.copy()
     frame["business_unit"] = pd.Categorical(frame["business_unit"], BUSINESS_UNIT_ORDER, ordered=True)
     frame = frame.sort_values("business_unit")
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        name="Actual", x=frame["business_unit"], y=frame["profit_margin_actual"], width=0.30,
+        name="Actual", x=frame["business_unit"], y=frame["profit_margin_actual"], width=0.24,
+        offsetgroup="actual",
         marker_color="#2563EB",
         hovertemplate="<b>%{x}</b><br>Actual Margin: %{y:.1%}<extra></extra>",
     ))
     fig.add_trace(go.Bar(
-        name="Target", x=frame["business_unit"], y=frame["profit_margin_budget"], width=0.30,
+        name="Target", x=frame["business_unit"], y=frame["profit_margin_budget"], width=0.24,
+        offsetgroup="target",
         marker_color="#F4B400",
         hovertemplate="<b>%{x}</b><br>Target Margin: %{y:.1%}<extra></extra>",
     ))
     upper = max(frame["profit_margin_actual"].max(), frame["profit_margin_budget"].max()) * 1.22
     fig.update_yaxes(title="Profit Margin", tickformat=".0%", range=[0, upper])
-    fig.update_layout(barmode="group", bargap=0.42, bargroupgap=0.16)
-    return base_layout(fig, "Profit Margin by Business Unit", f"Actual versus target – {period_label}")
+    fig.update_layout(barmode="group", bargap=0.46, bargroupgap=0.12)
+    return base_layout(fig, "Profit Margin by Business Unit", f"= Adjusted Profit ÷ Total Revenue, {period_label}")
 
 
 def single_ratio_trend_chart(frame: pd.DataFrame, column: str, title: str, subtitle: str, threshold: float | None = None) -> go.Figure:
@@ -223,17 +358,17 @@ def single_ratio_trend_chart(frame: pd.DataFrame, column: str, title: str, subti
         padding = max((high - low) * 0.65, high * 0.025)
         fig.update_yaxes(title="Ratio", tickformat=".1%", range=[max(0, low - padding), high + padding])
     fig.update_layout(showlegend=False)
-    return base_layout(fig, title, subtitle)
+    return base_layout(fig, title, f"{subtitle}, {format_chart_period_range(frame)}")
 
 
 def fee_revenue_mix_chart(frame: pd.DataFrame) -> go.Figure:
-    """Show the last six months of Capital Markets fee composition."""
+    """Show Capital Markets fee composition for the selected period."""
     components = [
         ("Advisory", "advisory_mix_actual"), ("Underwriting", "underwriting_mix_actual"),
         ("Trading", "trading_mix_actual"), ("Structuring", "structuring_mix_actual"),
         ("Syndication", "syndication_mix_actual"),
     ]
-    frame = frame.sort_values("period").tail(6)
+    frame = frame.sort_values("period")
     fig = go.Figure()
     for (label, column), color in zip(components, MIX_COLORS):
         fig.add_trace(go.Bar(
@@ -242,7 +377,7 @@ def fee_revenue_mix_chart(frame: pd.DataFrame) -> go.Figure:
         ))
     fig.update_yaxes(title="Revenue Mix", tickformat=".0%", range=[0, 1])
     fig.update_layout(barmode="stack", bargap=0.35)
-    fig = base_layout(fig, "Capital Markets Fee Revenue Mix", "Share of monthly fee revenue, latest six months")
+    fig = base_layout(fig, "Fee Revenue Mix (Capital Markets)", f"= Fee Component ÷ Total Fee Revenue, {format_chart_period_range(frame)}")
     fig.update_layout(
         legend=dict(orientation="h", yanchor="top", y=-0.17, xanchor="center", x=0.5, font=dict(size=17)),
         margin=dict(l=92, r=48, t=174, b=108),
@@ -251,41 +386,55 @@ def fee_revenue_mix_chart(frame: pd.DataFrame) -> go.Figure:
 
 
 def waterfall_chart(detail: pd.DataFrame, period_label: str) -> go.Figure:
-    """Bridge total budget to actual using driver-level variances."""
+    """Explain target-to-actual revenue variance with readable driver contribution bars."""
     frame = detail.loc[detail["metric_type"] == "Revenue"].copy()
     frame = frame.groupby("management_category", as_index=False)[["actual", "budget"]].sum()
     frame["variance"] = frame["actual"] - frame["budget"]
     budget = frame["budget"].sum()
     actual = frame["actual"].sum()
-    short_labels = frame["management_category"].replace({"Fee / Noninterest Income": "Fee Income"}).tolist()
-    labels = ["Target"] + short_labels + ["Actual"]
-    values = [budget] + frame["variance"].tolist() + [actual]
-    measures = ["absolute"] + ["relative"] * len(frame) + ["total"]
-    display_text = [f"${budget:.1f}M"] + ["" if abs(value) < 0.05 else f"${value:+.1f}M" for value in frame["variance"]] + [f"${actual:.1f}M"]
-    bar_widths = [0.52] + [0.42] * len(frame) + [0.52]
-    fig = go.Figure(
-        go.Waterfall(
-            name="Target to Actual",
-            showlegend=False,
-            width=bar_widths,
-            x=labels,
-            y=values,
-            measure=measures,
-            text=display_text,
-            textposition="outside",
-            connector={"line": {"color": "#7C8A9A", "width": 1.5, "dash": "dot"}},
-            increasing={"marker": {"color": "#2563EB"}},
-            decreasing={"marker": {"color": "#FF3B30"}},
-            totals={"marker": {"color": "#001E79"}},
-            hovertemplate="<b>%{x}</b><br>Y: $%{y:.1f}M<extra></extra>",
-        )
+    frame["Driver"] = frame["management_category"].replace({"Fee / Noninterest Income": "Fee / Noninterest Income"})
+    frame = frame.sort_values("variance", key=lambda values: values.abs(), ascending=True)
+    colors = ["#2563EB" if value >= 0 else "#FF3B30" for value in frame["variance"]]
+    text_values = ["$0.0M" if abs(value) < 0.05 else f"${value:+.1f}M" for value in frame["variance"]]
+    hover_data = [
+        [f"${budget_value:.1f}M", f"${actual_value:.1f}M", f"${variance_value:+.1f}M"]
+        for budget_value, actual_value, variance_value in zip(frame["budget"], frame["actual"], frame["variance"])
+    ]
+    fig = go.Figure(go.Bar(
+        x=frame["variance"], y=frame["Driver"], orientation="h",
+        marker_color=colors, width=0.48, text=text_values, textposition="outside",
+        textfont=dict(size=22, color="#001E79"),
+        customdata=hover_data,
+        hovertemplate=(
+            "<b>%{y}</b><br>Contribution: %{customdata[2]}"
+            "<br>Target: %{customdata[0]}<br>Actual: %{customdata[1]}<extra></extra>"
+        ),
+    ))
+    net_change = actual - budget
+    net_color = "#2563EB" if net_change >= 0 else "#FF3B30"
+    fig.add_annotation(
+        x=0.5, y=1.16, xref="paper", yref="paper", showarrow=False, align="center",
+        text=(
+            f"<span style='color:{net_color}'><b>Total Net Changes ${net_change:+.1f}M</b></span>"
+            f" &nbsp;&nbsp; = &nbsp;&nbsp; <b>Actual ${actual:.1f}M</b>"
+            f" &nbsp;&nbsp; − &nbsp;&nbsp; <b>Target ${budget:.1f}M</b>"
+        ),
+        font=dict(family="Times New Roman, Times, serif", size=23, color="#001E79"),
     )
-    fig.update_traces(textfont=dict(size=22, color="#001E79"))
-    fig.update_xaxes(tickangle=0, tickfont=dict(size=18))
-    fig.update_yaxes(title="Revenue ($M)", rangemode="tozero", gridcolor="#EEF1F7")
-    fig.update_yaxes(range=[0, max(budget, actual) * 1.22])
-    fig.update_layout(showlegend=False, waterfallgap=0.20)
-    return base_layout(fig, "Revenue Variance Bridge", f"Target to Actual – {period_label}")
+    minimum_variance = float(frame["variance"].min())
+    maximum_variance = float(frame["variance"].max())
+    max_abs = max(float(frame["variance"].abs().max()), 0.5)
+    fig.add_vline(x=0, line_color="#94A3B8", line_width=1.5)
+    if minimum_variance >= 0:
+        x_range = [0, max(maximum_variance * 1.28, 0.5)]
+    elif maximum_variance <= 0:
+        x_range = [min(minimum_variance * 1.28, -0.5), 0]
+    else:
+        x_range = [-max_abs * 1.25, max_abs * 1.25]
+    fig.update_xaxes(title="Contribution to Revenue Variance ($M)", range=x_range, zeroline=False)
+    fig.update_yaxes(title="", tickfont=dict(size=19), automargin=True)
+    fig.update_layout(showlegend=False, bargap=0.38)
+    return base_layout(fig, "Revenue vs. Target", f"= Actual − Target, {period_label}")
 
 
 def performance_colors(values: pd.Series) -> list[str]:
@@ -314,7 +463,7 @@ def revenue_bar_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
         )
     fig.update_yaxes(title="Revenue ($M)")
     fig.update_layout(bargap=0.48)
-    return base_layout(fig, "Revenue by Business Unit", f"Actual revenue – {period_label}")
+    return base_layout(fig, "Revenue by Business Unit", f"= Sum of Actual Revenue Metrics, {period_label}")
 
 
 def profit_bar_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
@@ -332,7 +481,7 @@ def profit_bar_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
         )
     fig.update_yaxes(title="Adjusted Profit ($M)")
     fig.update_layout(bargap=0.48)
-    return base_layout(fig, "Adjusted Profit by Business Unit", f"Actual adjusted profit – {period_label}")
+    return base_layout(fig, "Adjusted Profit by Business Unit", f"= Revenue − Operating Expense − Credit Provision (where applicable), {period_label}")
 
 
 def expense_comparison_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
@@ -346,7 +495,9 @@ def expense_comparison_chart(current: pd.DataFrame, period_label: str) -> go.Fig
             name="Actual",
             x=frame["business_unit"],
             y=frame["operating_expense_actual"],
-            width=0.32,
+            width=0.24,
+            offsetgroup="actual",
+            alignmentgroup="expense",
             marker_color="#2563EB",
             hovertemplate="<b>%{x}</b><br>Actual Expense: $%{y:.1f}M<extra></extra>",
         )
@@ -356,15 +507,17 @@ def expense_comparison_chart(current: pd.DataFrame, period_label: str) -> go.Fig
             name="Budget",
             x=frame["business_unit"],
             y=frame["operating_expense_budget"],
-            width=0.32,
+            width=0.24,
+            offsetgroup="budget",
+            alignmentgroup="expense",
             marker_color="#F4B400",
             hovertemplate="<b>%{x}</b><br>Budget Expense: $%{y:.1f}M<extra></extra>",
         )
     )
     upper = max(frame["operating_expense_actual"].max(), frame["operating_expense_budget"].max()) * 1.24
     fig.update_yaxes(title="Operating Expense ($M)", range=[0, upper])
-    fig.update_layout(barmode="group", bargap=0.42, bargroupgap=0.16)
-    return base_layout(fig, "Operating Expense vs. Budget", f"Actual versus budget – {period_label}")
+    fig.update_layout(barmode="group", bargap=0.50, bargroupgap=0.28)
+    return base_layout(fig, "Operating Expense vs. Budget", f"= Actual Operating Expense − Budget Operating Expense, {period_label}")
 
 
 def aggregate_kpis(frame: pd.DataFrame) -> pd.DataFrame:
@@ -384,7 +537,7 @@ def aggregate_kpis(frame: pd.DataFrame) -> pd.DataFrame:
     result["operating_expense_vs_budget"] = result["operating_expense_actual"] / result["operating_expense_budget"] - 1
     result["cost_to_income_ratio_actual"] = result["operating_expense_actual"] / result["revenue_actual"]
     result["profit_margin_actual"] = result["adjusted_profit_actual"] / result["revenue_actual"]
-    result["forecast_accuracy"] = 1 - (result["revenue_actual"] - result["revenue_forecast"]).abs() / result["revenue_forecast"]
+    result["profit_margin_budget"] = result["adjusted_profit_budget"] / result["revenue_budget"]
     ending_values = frame.sort_values("period").groupby("business_unit", as_index=False).tail(1).set_index("business_unit")
     for ratio in ["loan_to_deposit_ratio_actual", "npl_ratio_actual"]:
         if ratio in ending_values:
@@ -399,7 +552,7 @@ def aggregate_kpis(frame: pd.DataFrame) -> pd.DataFrame:
 
 def scorecard_rows(current: pd.DataFrame) -> pd.DataFrame:
     """Create an executive-ready scorecard table."""
-    result = current[["business_unit", "revenue_actual", "revenue_vs_budget", "revenue_yoy", "adjusted_profit_actual", "profit_margin_actual", "forecast_accuracy"]].copy()
+    result = current[["business_unit", "revenue_actual", "revenue_vs_budget", "revenue_yoy", "adjusted_profit_actual", "profit_margin_actual"]].copy()
     result["status"] = result.apply(
         lambda row: "Green" if row["revenue_vs_budget"] >= 0 and row["profit_margin_actual"] >= 0.35 else ("Yellow" if row["revenue_vs_budget"] >= -0.05 else "Red"),
         axis=1,
@@ -409,49 +562,69 @@ def scorecard_rows(current: pd.DataFrame) -> pd.DataFrame:
 
 def render_scorecard(scorecard: pd.DataFrame) -> None:
     """Render a bounded HTML scorecard with clear status indicators."""
-    header = "<tr><th>Business Unit</th><th>Status</th><th>Revenue</th><th>Revenue vs Target</th><th>YoY</th><th>Profit</th><th>Margin</th><th>Actual vs Forecast</th></tr>"
+    header = "<tr><th>Business Units</th><th>Statuses</th><th>Revenues</th><th>Revenues vs. Targets</th><th>YoY</th><th>Profits</th><th>Margins</th></tr>"
     rows = []
-    status_colors = {"Green": "#3C7C7A", "Yellow": "#C89B3C", "Red": "#B74242"}
+    status_colors = {"Green": "#2563EB", "Yellow": "#C89B3C", "Red": "#B74242"}
+    status_labels = {"Green": "Positive", "Yellow": "Caution", "Red": "Critical"}
     for _, row in scorecard.iterrows():
-        badge = f"<span class='status' style='background:{status_colors[row['status']]}'>{row['status']}</span>"
+        badge = f"<span class='status' style='background:{status_colors[row['status']]}'>{status_labels[row['status']]}</span>"
         rows.append(
             "<tr>"
             f"<td class='unit'>{row['business_unit']}</td><td>{badge}</td>"
             f"<td>{fmt_money(row['revenue_actual'])}</td><td>{row['revenue_vs_budget']:+.1%}</td>"
             f"<td>{row['revenue_yoy']:+.1%}</td><td>{fmt_money(row['adjusted_profit_actual'])}</td>"
-            f"<td>{row['profit_margin_actual']:.1%}</td><td>{row['forecast_accuracy']:.1%}</td></tr>"
+            f"<td>{row['profit_margin_actual']:.1%}</td></tr>"
         )
     st.markdown(f"<div class='score-wrap'><table class='scorecard'>{header}{''.join(rows)}</table></div>", unsafe_allow_html=True)
 
 
 def render_business_model_metrics(current: pd.DataFrame) -> None:
-    """Show common efficiency ratios and one business-specific metric set."""
+    """Show one department per row with detailed subrows for specialized metrics."""
     rows = []
-    for _, row in current.sort_values("business_unit").iterrows():
+    ordered = current.copy()
+    ordered["business_unit"] = pd.Categorical(ordered["business_unit"], BUSINESS_UNIT_ORDER, ordered=True)
+    ordered = ordered.sort_values("business_unit")
+    for _, row in ordered.iterrows():
         unit = row["business_unit"]
         if unit == "Commercial Banking":
-            specialized = f"Loan-to-Deposit Ratio: {row['loan_to_deposit_ratio_actual']:.1%}"
+            specialized = [(
+                "Loan-to-Deposit Ratio",
+                "= Loan Balance ÷ Deposit Balance",
+                f"{row['loan_to_deposit_ratio_actual']:.1%}",
+            )]
         elif unit == "Commercial Real Estate":
-            specialized = f"NPL Ratio: {row['npl_ratio_actual']:.2%}"
+            specialized = [(
+                "NPL Ratio",
+                "= NPL Proxy ÷ CRE Loan Balance",
+                f"{row['npl_ratio_actual']:.2%}",
+            )]
         else:
-            mix_items = [
-                ("Advisory", row["advisory_mix_actual"]),
-                ("Underwriting", row["underwriting_mix_actual"]),
-                ("Trading", row["trading_mix_actual"]),
-                ("Structuring", row["structuring_mix_actual"]),
-                ("Syndication", row["syndication_mix_actual"]),
+            specialized = [
+                ("Advisory Share", "= Advisory Fee ÷ Total Fee Revenue", f"{row['advisory_mix_actual']:.1%}"),
+                ("Underwriting Share", "= Underwriting Revenue ÷ Total Fee Revenue", f"{row['underwriting_mix_actual']:.1%}"),
+                ("Trading Share", "= Trading Revenue ÷ Total Fee Revenue", f"{row['trading_mix_actual']:.1%}"),
+                ("Structuring Share", "= Structuring Fee ÷ Total Fee Revenue", f"{row['structuring_mix_actual']:.1%}"),
+                ("Syndication Share", "= Syndication Fee ÷ Total Fee Revenue", f"{row['syndication_mix_actual']:.1%}"),
             ]
-            specialized = "Revenue Mix: " + ", ".join(f"{label} {value:.1%}" for label, value in mix_items)
+        specialized_html = "".join(
+            "<div class='other-metric-line'>"
+            f"<span class='other-name'>{escape(metric)}</span>"
+            f"<span class='other-formula'>{escape(calculation)}</span>"
+            f"<strong class='other-value'>{escape(value)}</strong></div>"
+            for metric, calculation, value in specialized
+        )
         rows.append(
             "<tr>"
-            f"<td>{escape(unit)}</td><td>{row['cost_to_income_ratio_actual']:.1%}</td>"
-            f"<td>{row['profit_margin_actual']:.1%}</td><td>{escape(specialized)}</td></tr>"
+            f"<td>{escape(str(unit))}</td>"
+            f"<td>{row['profit_margin_actual']:.1%}</td>"
+            f"<td>{row['cost_to_income_ratio_actual']:.1%}</td>"
+            f"<td class='other-metrics-cell'>{specialized_html}</td></tr>"
         )
-    header = "<tr><th>Business Unit</th><th>Cost-to-Income Ratio</th><th>Profit Margin</th><th>Other Metrics</th></tr>"
+    header = "<tr><th>Business Units</th><th>Profit Margins</th><th>Cost-to-Income Ratios</th><th>Other Metrics</th></tr>"
     st.markdown(f"<div class='ratio-wrap'><table class='ratio-table'>{header}{''.join(rows)}</table></div>", unsafe_allow_html=True)
 
 
-st.set_page_config(page_title="Automating Three Businesses LOB Financial Review", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Automated Three-Business Performance Dashboard", page_icon="📊", layout="wide")
 st.markdown(
     """
     <style>
@@ -466,10 +639,10 @@ st.markdown(
       h3 { font-size:2.35rem !important; font-weight:800 !important; margin-top:2.2rem !important; margin-bottom:1rem !important; line-height:1.2 !important; }
       p, .stCaption { color:#334155; font-size:1.3rem !important; line-height:1.5 !important; }
       .kpi-spacer { height:1.2rem; }
-      [data-testid="stMetric"] { display:grid; grid-template-rows:auto auto auto; align-content:start; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:20px; box-shadow:0 2px 8px rgba(15,23,42,.04); min-height:172px; }
-      [data-testid="stMetricLabel"] { margin:0 0 .45rem !important; }
-      [data-testid="stMetricLabel"] p { color:#334155 !important; font-size:1.8rem !important; font-weight:700 !important; line-height:1.15 !important; margin:0 !important; }
-      [data-testid="stMetricValue"] { color:#0B2E6F !important; font-size:2.45rem !important; font-weight:800 !important; line-height:1.05 !important; margin:0 0 .5rem !important; }
+      [data-testid="stMetric"] { display:grid; grid-template-rows:auto auto auto; align-content:start; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:22px 20px; box-shadow:0 2px 8px rgba(15,23,42,.04); min-height:172px; }
+      [data-testid="stMetricLabel"] { margin:0 0 .72rem !important; }
+      [data-testid="stMetricLabel"] p { color:#334155 !important; font-size:1.9rem !important; font-weight:700 !important; line-height:1.15 !important; margin:0 !important; }
+      [data-testid="stMetricValue"] { color:#0B2E6F !important; font-size:2.2rem !important; font-weight:800 !important; line-height:1.08 !important; margin:0 0 .82rem !important; }
       [data-testid="stMetricDelta"] { color:#2563EB !important; font-size:1.25rem !important; font-weight:800 !important; line-height:1.15 !important; margin:0 !important; }
       [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(4) [data-testid="stMetric"],
       [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(5) [data-testid="stMetric"] { grid-template-rows:auto 1fr; }
@@ -479,7 +652,9 @@ st.markdown(
       [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3) [data-testid="stMetricDelta"] { color:#FF3B30 !important; }
       [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3) [data-testid="stMetricDelta"] svg { fill:#FF3B30 !important; color:#FF3B30 !important; }
       .brief { background:#FFFFFF; border:1px solid #E2E8F0; border-left:7px solid #0B2E6F; padding:24px 28px; border-radius:10px; box-shadow:0 3px 12px rgba(15,23,42,.05); color:#334155; }
-      .creator-credit { text-align:right; color:#334155; font-size:1.35rem; font-weight:700; margin:0 0 .45rem; }
+      .brand-row { display:flex; align-items:center; justify-content:space-between; gap:24px; width:100%; margin:0 0 1.15rem; }
+      .brand-logo { display:block; width:220px; height:auto; flex:0 0 auto; }
+      .creator-credit { text-align:right; color:#334155; font-size:1.6rem; font-weight:700; margin:0; white-space:nowrap; }
       .creator-credit a { color:#0B2E6F; font-weight:800; text-decoration:underline; text-underline-offset:3px; }
       .creator-credit a:hover { color:#2563EB; }
       .brief strong { display:block; color:#0B2E6F; font-size:2.05rem; font-weight:800; line-height:1.15; margin-bottom:.7rem; }
@@ -508,9 +683,17 @@ st.markdown(
       .ratio-wrap { overflow-x:auto; background:white; border-radius:10px; border:1px solid #DCE2F3; margin-bottom:1.4rem; }
       .ratio-table { width:100%; min-width:1200px; border-collapse:collapse; margin:0 !important; font-size:1.4rem; }
       .ratio-table th { background:#001E79; color:white; border:2px solid white; padding:16px; text-align:center; font-size:1.5rem; }
+      .ratio-table th:nth-child(1) { width:18%; } .ratio-table th:nth-child(2) { width:13%; }
+      .ratio-table th:nth-child(3) { width:14%; } .ratio-table th:nth-child(4) { width:55%; }
       .ratio-table td { padding:16px; border-bottom:1px solid #DCE2F3; text-align:center; color:#26384D; }
-      .ratio-table td:first-child { text-align:left; color:#001E79; font-weight:800; }
-      .ratio-table td:last-child { text-align:left; }
+      .ratio-table td:first-child { text-align:center; vertical-align:middle; color:#001E79; font-weight:800; }
+      .ratio-table .other-metrics-cell { padding:0; text-align:left; }
+      .other-metric-line { display:grid; grid-template-columns:26% 56% 18%; align-items:center; min-height:56px; border-bottom:1px solid #DCE2F3; }
+      .other-metric-line:last-child { border-bottom:0; }
+      .other-name, .other-formula, .other-value { padding:12px 14px; }
+      .other-name { color:#001E79; font-weight:800; }
+      .other-formula { border-left:1px solid #DCE2F3; border-right:1px solid #DCE2F3; }
+      .other-value { color:#001E79; text-align:center; }
       .ratio-table tr:nth-child(even) { background:#F5F7FC; }
       .disclaimer { color:#687386; font-size:1.05rem; padding-top:18px; }
       [data-testid="stSidebar"] { min-width:500px; max-width:500px; }
@@ -519,11 +702,21 @@ st.markdown(
       [data-testid="stSidebarNav"] a { min-height:3.8rem !important; padding:.55rem .8rem !important; border-radius:10px !important; }
       [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] { min-height:3.8rem !important; height:auto !important; padding:.65rem .8rem !important; align-items:flex-start !important; }
       [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] p { font-size:2rem !important; font-weight:800 !important; line-height:1.15 !important; white-space:normal !important; overflow:visible !important; text-overflow:clip !important; overflow-wrap:anywhere !important; }
-      [data-testid="stSidebar"] h3 { font-size:2rem !important; font-weight:800 !important; margin-bottom:1.15rem !important; }
+      [data-testid="stSidebar"] h3 { font-size:2rem !important; font-weight:800 !important; margin-top:0 !important; margin-bottom:1.15rem !important; }
+      [data-testid="stSidebar"] h3,
+      [data-testid="stSidebar"] [data-testid="stWidgetLabel"] { margin-left:.8rem !important; }
       [data-testid="stSidebar"] label p { font-size:1.8rem !important; font-weight:800 !important; line-height:1.2 !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
+      [data-baseweb="popover"] [role="listbox"] { min-width:420px !important; }
+      [data-baseweb="popover"] [role="option"],
+      [data-baseweb="popover"] [role="option"] * {
+        font-family:"Times New Roman", Times, serif !important;
+        font-size:1.7rem !important;
+        line-height:1.25 !important;
+      }
+      [data-baseweb="popover"] [role="option"] { min-height:3.5rem !important; padding:.7rem 1rem !important; }
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.8rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button p { font-size:1.5rem !important; }
@@ -532,6 +725,13 @@ st.markdown(
       [data-testid="stSidebar"] [data-baseweb="tag"] svg { color:#001E79 !important; fill:#001E79 !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div:has([data-baseweb="tag"]) { min-height:10.5rem !important; align-content:flex-start !important; }
       [data-testid="stSidebar"] .stCaption { font-size:1.15rem !important; }
+      .sidebar-divider { border-top:1px solid #CBD5E1; margin:1.1rem 0 1.35rem; }
+      .nav-divider { border-top:1px solid #CBD5E1; margin:.15rem 0 -1rem; }
+      .overview-toc { margin-top:.2rem; padding:0 .8rem .5rem; }
+      .overview-toc-title { color:#0B2E6F; font-size:2rem; font-weight:800; margin:0 0 .8rem; }
+      .overview-toc a { display:block; color:#26384D !important; font-size:1.45rem; font-weight:700; line-height:1.3; padding:.42rem .35rem; text-decoration:none !important; border-radius:6px; }
+      .overview-toc a:hover { color:#001E79 !important; background:#E9EEF8; }
+      .section-anchor { position:relative; top:-75px; visibility:hidden; }
       [data-testid="stPlotlyChart"] { width:100%; max-width:100%; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:0; margin-bottom:16px; box-shadow:0 2px 8px rgba(15,23,42,.035); overflow:visible !important; }
       [data-testid="stPlotlyChart"] > div { width:100% !important; max-width:100% !important; overflow:visible !important; }
       [data-testid="stPlotlyChart"] .scatterlayer .point,
@@ -543,6 +743,11 @@ st.markdown(
       [data-testid="stExpander"] summary { padding-top:.75rem !important; padding-bottom:.75rem !important; }
       [data-testid="stExpander"] summary p { font-size:2.35rem !important; font-weight:800 !important; color:#0B2E6F !important; line-height:1.2 !important; }
       @media (max-width:1100px) { .alert-group { grid-template-columns:220px 1fr; } }
+      @media (max-width:700px) {
+        .brand-row { align-items:flex-start; flex-direction:column; gap:12px; }
+        .brand-logo { width:190px; }
+        .creator-credit { font-size:1.4rem; white-space:normal; text-align:left; }
+      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -559,7 +764,7 @@ unit_options = sorted(kpis["business_unit"].unique())
 with st.sidebar:
     st.page_link("App.py", label="Dashboard Overview")
     st.page_link("pages/1_Source_Data.py", label="Source Data for Three Businesses")
-    st.markdown("---")
+    st.markdown("<div class='nav-divider'></div>", unsafe_allow_html=True)
     st.markdown("### Review Controls")
     time_mode = st.segmented_control("Time view", ["Month", "Quarter", "Year", "Custom Range"], default="Month")
     if time_mode == "Month":
@@ -595,7 +800,21 @@ with st.sidebar:
         selection_label = f"{selected_start:%b %Y} – {selected_end:%b %Y}"
         title_prefix = "Custom Period"
     selected_units = st.multiselect("Business units", unit_options, default=unit_options)
-    st.markdown("---")
+    st.markdown(
+        """
+        <div class="sidebar-divider"></div>
+        <nav class="overview-toc" aria-label="Dashboard contents">
+          <div class="overview-toc-title">Contents</div>
+          <a href="#executive-summary">1. AI Executive Summary</a>
+          <a href="#attention">2. Items Requiring Attention</a>
+          <a href="#scorecard">3. Business Unit Scorecard</a>
+          <a href="#business-model-metrics">4. Defined Metrics</a>
+          <a href="#total-trend">5. Total Trend</a>
+          <a href="#key-business-metrics">6. Key Business Metrics</a>
+        </nav>
+        """,
+        unsafe_allow_html=True,
+    )
 
 if not selected_units:
     st.warning("Select at least one business unit.")
@@ -604,18 +823,61 @@ if not selected_units:
 period_kpis = kpis.loc[kpis["period"].between(selected_start, selected_end) & kpis["business_unit"].isin(selected_units)]
 current = aggregate_kpis(period_kpis)
 current_alerts = alerts.loc[alerts["period"].between(selected_start, selected_end) & alerts["business_unit"].isin(selected_units)]
+raw_period_evidence = load_raw_source_evidence(selected_start, selected_end, tuple(selected_units))
+period_calculation_evidence = detail.loc[
+    detail["period"].between(selected_start, selected_end) & detail["business_unit"].isin(selected_units)
+]
 
+st.markdown("<div id='executive-summary' class='section-anchor'></div>", unsafe_allow_html=True)
 st.markdown(
+    f"<div class='brand-row'>"
+    f"<img class='brand-logo' src='{LOGO_DATA_URI}' alt='U.S. Bank logo'>"
     "<div class='creator-credit'>Ziqi (Ankit) Cao &nbsp;·&nbsp; "
-    "<a href='https://www.linkedin.com/in/ziqi-ankit-cao' target='_blank' rel='noopener noreferrer'>LinkedIn</a></div>",
+    "<a href='https://www.linkedin.com/in/ziqi-ankit-cao' target='_blank' rel='noopener noreferrer'>LinkedIn</a></div>"
+    "</div>",
     unsafe_allow_html=True,
 )
-st.image(str(LOGO_PATH), width=220)
-st.title(f"Automating Three Businesses LOB Financial Review – {selection_label}")
+st.title(f"Automated Three-Business Performance Dashboard – {selection_label}")
 
-summary, attention_items = generate_executive_summary(period_kpis, current_alerts, selection_label)
+summary_fallback, attention_items = generate_executive_summary(period_kpis, current_alerts, selection_label)
+severity_to_status = {"Red": "Critical", "Yellow": "Caution", "Green": "Positive"}
+severity_rank = {"Red": 0, "Yellow": 1, "Green": 2}
+fallback_reviews = []
+for business_unit in selected_units:
+    unit_alerts = current_alerts.loc[current_alerts["business_unit"].eq(business_unit)].copy()
+    if unit_alerts.empty:
+        fallback_reviews.append({
+            "business_unit": business_unit,
+            "status": "Positive",
+            "label": "No exceptions",
+            "message": "No configured alerts were triggered in the selected period.",
+        })
+    else:
+        unit_alerts["rank"] = unit_alerts["severity"].map(severity_rank)
+        alert = unit_alerts.sort_values(["rank", "period"], ascending=[True, False]).iloc[0]
+        message = str(alert["message"])
+        if message.startswith(f"{business_unit} "):
+            message = message[len(business_unit) + 1 :]
+            message = message[:1].upper() + message[1:]
+        fallback_reviews.append({
+            "business_unit": business_unit,
+            "status": severity_to_status.get(str(alert["severity"]), "Caution"),
+            "label": str(alert["rule"]),
+            "message": message,
+        })
+
+period_review = generate_ai_period_review({
+    "version": 2,
+    "reporting_period": selection_label,
+    "selected_business_units": list(selected_units),
+    "raw_source_records": raw_period_evidence,
+    "clean_monthly_kpis": dataframe_records(period_kpis),
+    "calculated_metric_records": dataframe_records(period_calculation_evidence),
+    "deterministic_rule_alerts": dataframe_records(current_alerts),
+}, summary_fallback, fallback_reviews)
+summary = period_review["executive_summary"]
 st.markdown(
-    f"<div class='brief'><strong>Executive Summary</strong><span class='summary-text'>{escape(summary)}</span></div>",
+    f"<div class='brief'><strong>AI Executive Summary</strong><span class='summary-text'>{escape(summary)}</span></div>",
     unsafe_allow_html=True,
 )
 st.markdown("<div class='kpi-spacer'></div>", unsafe_allow_html=True)
@@ -624,14 +886,13 @@ total_revenue = current["revenue_actual"].sum()
 total_budget = current["revenue_budget"].sum()
 total_profit = current["adjusted_profit_actual"].sum()
 total_expense = current["operating_expense_actual"].sum()
-total_forecast = current["revenue_forecast"].sum()
-cards = st.columns(5, gap="medium")
-cards[0].metric("Revenue", fmt_money(total_revenue), f"{(total_revenue / total_budget - 1):+.1%} vs target")
-cards[1].metric("Adjusted Profit", fmt_money(total_profit), f"{(total_profit / current['adjusted_profit_budget'].sum() - 1):+.1%} vs target")
-cards[2].metric("Operating Expense", fmt_money(total_expense), f"{(total_expense / current['operating_expense_budget'].sum() - 1):+.1%} vs budget", delta_color="inverse")
-cards[3].metric("Target Attainment", f"{total_revenue / total_budget:.1%}")
-cards[4].metric("Actual vs Forecast", f"{1 - abs(total_revenue - total_forecast) / total_forecast:.1%}")
+cards = st.columns(4, gap="medium")
+cards[0].metric("Revenue", fmt_money(total_revenue), f"{(total_revenue / total_budget - 1):+.1%} vs. target")
+cards[1].metric("Adjusted Profit", fmt_money(total_profit), f"{(total_profit / current['adjusted_profit_budget'].sum() - 1):+.1%} vs. target")
+cards[2].metric("Operating Expense", fmt_money(total_expense), f"{(total_expense / current['operating_expense_budget'].sum() - 1):+.1%} vs. budget", delta_color="inverse")
+cards[3].metric("Target Achieved", f"{total_revenue / total_budget:.1%}")
 
+st.markdown("<div id='attention' class='section-anchor'></div>", unsafe_allow_html=True)
 st.markdown(
     """
     <div class="attention-heading">
@@ -645,89 +906,82 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-severity_rank = {"Red": 0, "Yellow": 1, "Green": 2}
-grouped_alerts = current_alerts.assign(rank=current_alerts["severity"].map(severity_rank)).sort_values(["rank", "period"])
+review_by_unit = {item["business_unit"]: item for item in period_review["business_reviews"]}
+status_css = {"Critical": "red", "Caution": "yellow", "Positive": "green"}
 for business_unit in selected_units:
-    business_alerts = grouped_alerts.loc[grouped_alerts["business_unit"] == business_unit]
-    alert_rows = []
-    if business_alerts.empty:
-        alert_rows.append(
-            "<div class='alert alert-green'><span class='alert-rule'>No exceptions</span> · "
-            "No configured alerts were triggered in the selected period.</div>"
-        )
-    else:
-        for _, alert in business_alerts.iterrows():
-            message = str(alert["message"])
-            if message.startswith(f"{business_unit} "):
-                message = message[len(business_unit) + 1 :]
-                message = message[:1].upper() + message[1:]
-            alert_rows.append(
-                f"<div class='alert alert-{escape(str(alert['severity']).lower())}'>"
-                f"<span class='alert-rule'>{escape(str(alert['rule']))}</span> · {escape(message)}</div>"
-            )
+    review = review_by_unit[business_unit]
+    alert_rows = [
+        f"<div class='alert alert-{status_css[review['status']]}'><span class='alert-rule'>"
+        f"{escape(review['label'])}</span> · {escape(review['message'])}</div>"
+    ]
     st.markdown(
         f"<div class='alert-group'><div class='alert-business'>{escape(str(business_unit))}</div>"
         f"<div class='alert-list'>{''.join(alert_rows)}</div></div>",
         unsafe_allow_html=True,
     )
 
+st.markdown("<div id='scorecard' class='section-anchor'></div>", unsafe_allow_html=True)
 st.subheader("Business Unit Scorecard")
 render_scorecard(scorecard_rows(current))
-st.subheader("Business Model Metrics")
+st.markdown("<div id='business-model-metrics' class='section-anchor'></div>", unsafe_allow_html=True)
+st.subheader("Defined Metrics")
 render_business_model_metrics(current)
 
 trend_start = selected_end - pd.DateOffset(months=5) if time_mode == "Month" else selected_start
 trend_data = kpis.loc[kpis["period"].between(trend_start, selected_end) & kpis["business_unit"].isin(selected_units)]
 selected_detail = detail.loc[detail["period"].between(selected_start, selected_end) & detail["business_unit"].isin(selected_units)]
+trend_detail = detail.loc[detail["period"].between(trend_start, selected_end) & detail["business_unit"].isin(selected_units)]
+raw_trend_evidence = load_raw_source_evidence(trend_start, selected_end, tuple(selected_units))
 chart_period_label = selection_label
 latest_period = trend_data["period"].max()
 latest_month = trend_data.loc[trend_data["period"] == latest_period].copy()
 efficiency_latest = latest_month.sort_values("cost_to_income_ratio_actual", ascending=False).iloc[0]
 efficiency_lowest = latest_month.sort_values("cost_to_income_ratio_actual", ascending=True).iloc[0]
-margin_latest = latest_month.sort_values("profit_margin_actual", ascending=False).iloc[0]
-margin_target = float(margin_latest["profit_margin_budget"])
+margin_period = current.sort_values("profit_margin_actual", ascending=False).iloc[0]
+margin_target = float(margin_period["profit_margin_budget"])
 
 revenue_latest = latest_month.sort_values("revenue_actual", ascending=False).iloc[0]
 revenue_history = trend_data.loc[trend_data["business_unit"] == revenue_latest["business_unit"]].sort_values("period")
 prior_revenue = float(revenue_history.iloc[-2]["revenue_actual"]) if len(revenue_history) > 1 else float(revenue_latest["revenue_actual"])
-revenue_summary = generate_chart_summary("revenue_trend", {
+revenue_summary = generate_chart_summary("revenue_trend", attach_evidence({
     "_version": 3,
     "unit": revenue_latest["business_unit"], "latest": round(float(revenue_latest["revenue_actual"]), 1),
     "change": round((float(revenue_latest["revenue_actual"]) / prior_revenue - 1) * 100, 1),
     "period": latest_period.strftime("%B %Y"),
-})
+}, raw_trend_evidence, trend_detail.loc[trend_detail["metric_type"] == "Revenue"]))
 
-efficiency_summary = generate_chart_summary("cost_to_income", {
+efficiency_summary = generate_chart_summary("cost_to_income", attach_evidence({
     "_version": 3,
     "highest_unit": efficiency_latest["business_unit"],
     "highest": round(float(efficiency_latest["cost_to_income_ratio_actual"] * 100), 1),
     "lowest_unit": efficiency_lowest["business_unit"],
     "lowest": round(float(efficiency_lowest["cost_to_income_ratio_actual"] * 100), 1),
     "period": latest_period.strftime("%B %Y"),
-})
-margin_summary = generate_chart_summary("profit_margin", {
-    "_version": 3,
-    "highest_unit": margin_latest["business_unit"],
-    "highest": round(float(margin_latest["profit_margin_actual"] * 100), 1),
-    "variance": round((float(margin_latest["profit_margin_actual"]) - margin_target) * 100, 1),
-    "period": latest_period.strftime("%B %Y"),
-})
+}, raw_trend_evidence, trend_detail))
+margin_summary = generate_chart_summary("profit_margin", attach_evidence({
+    "_version": 4,
+    "highest_unit": margin_period["business_unit"],
+    "highest": round(float(margin_period["profit_margin_actual"] * 100), 1),
+    "variance": round((float(margin_period["profit_margin_actual"]) - margin_target) * 100, 1),
+    "period": selection_label,
+}, raw_period_evidence, period_calculation_evidence))
 
 variance_frame = selected_detail.loc[selected_detail["metric_type"] == "Revenue"].groupby("management_category", as_index=False)[["actual", "budget"]].sum()
 variance_frame["variance"] = variance_frame["actual"] - variance_frame["budget"]
 largest_driver = variance_frame.loc[variance_frame["variance"].abs().idxmax(), "management_category"]
-variance_summary = generate_chart_summary("revenue_variance", {
+variance_summary = generate_chart_summary("revenue_variance", attach_evidence({
     "_version": 3,
     "variance": round(float(variance_frame["variance"].sum()), 1), "driver": str(largest_driver),
-})
+}, raw_period_evidence, selected_detail.loc[selected_detail["metric_type"] == "Revenue"]))
 expense_frame = current.copy()
 expense_frame["variance"] = expense_frame["operating_expense_actual"] - expense_frame["operating_expense_budget"]
 largest_expense = expense_frame.sort_values("variance", ascending=False).iloc[0]
-expense_summary = generate_chart_summary("expense_variance", {
+expense_summary = generate_chart_summary("expense_variance", attach_evidence({
     "_version": 3,
     "unit": largest_expense["business_unit"], "variance": round(float(max(largest_expense["variance"], 0)), 1),
-})
+}, raw_period_evidence, selected_detail.loc[selected_detail["metric_type"] == "Expense"]))
 
+st.markdown("<div id='total-trend' class='section-anchor'></div>", unsafe_allow_html=True)
 with st.expander("Total Trend", expanded=True):
     revenue_trend_view, efficiency_trend_view = st.columns(2)
     with revenue_trend_view:
@@ -753,41 +1007,47 @@ with st.expander("Total Trend", expanded=True):
             use_container_width=True, config={"displayModeBar": False},
         )
 
+st.markdown("<div id='key-business-metrics' class='section-anchor'></div>", unsafe_allow_html=True)
 with st.expander("Key Business Metrics", expanded=True):
     specialized_figures = [(
         margin_summary,
-        profit_margin_comparison_chart(latest_month, latest_period.strftime("%B %Y")).update_layout(height=580),
+        profit_margin_comparison_chart(current, selection_label).update_layout(height=580),
     )]
     if "Commercial Real Estate" in selected_units:
         cre = kpis.loc[(kpis["business_unit"] == "Commercial Real Estate") & kpis["period"].between(trend_start, selected_end)].sort_values("period")
         if not cre.empty:
             values = cre["npl_ratio_actual"].dropna()
-            summary_text = generate_chart_summary("npl_ratio", {
+            summary_text = generate_chart_summary("npl_ratio", attach_evidence({
                 "_version": 3,
                 "business_unit": "Commercial Real Estate", "latest": round(float(values.iloc[-1] * 100), 2),
                 "prior": round(float(values.iloc[-2] * 100), 2) if len(values) > 1 else round(float(values.iloc[-1] * 100), 2),
                 "months": int(len(values)),
-            })
+            }, [row for row in raw_trend_evidence if row.get("Business Unit") == "Commercial Real Estate"],
+                trend_detail.loc[trend_detail["business_unit"] == "Commercial Real Estate"]))
             specialized_figures.append((summary_text, single_ratio_trend_chart(
-                cre, "npl_ratio_actual", "Commercial Real Estate NPL Ratio",
-                "NPL Proxy / CRE Loan Balance", threshold=0.015,
+                cre, "npl_ratio_actual", "NPL Ratio (Commercial Real Estate)",
+                "= NPL Proxy ÷ CRE Loan Balance", threshold=0.015,
             ).update_layout(height=580)))
     if "Commercial Banking" in selected_units:
         banking = kpis.loc[(kpis["business_unit"] == "Commercial Banking") & kpis["period"].between(trend_start, selected_end)].sort_values("period")
         if not banking.empty:
             values = banking["loan_to_deposit_ratio_actual"].dropna()
-            summary_text = generate_chart_summary("loan_to_deposit", {
+            summary_text = generate_chart_summary("loan_to_deposit", attach_evidence({
                 "_version": 3,
                 "business_unit": "Commercial Banking", "latest": round(float(values.iloc[-1] * 100), 1),
                 "prior": round(float(values.iloc[-2] * 100), 1) if len(values) > 1 else round(float(values.iloc[-1] * 100), 1),
                 "months": int(len(values)), "period": banking.iloc[-1]["period"].strftime("%B %Y"),
-            })
+            }, [row for row in raw_trend_evidence if row.get("Business Unit") == "Commercial Banking"],
+                trend_detail.loc[trend_detail["business_unit"] == "Commercial Banking"]))
             specialized_figures.append((summary_text, single_ratio_trend_chart(
-                banking, "loan_to_deposit_ratio_actual", "Commercial Banking Loan to Deposit Ratio",
-                "Loan Balance / Deposit Balance",
+                banking, "loan_to_deposit_ratio_actual", "Loan to Deposit Ratio (Commercial Banking)",
+                "= Loan Balance ÷ Deposit Balance",
             ).update_layout(height=580)))
     if "Capital Markets" in selected_units:
-        markets = kpis.loc[(kpis["business_unit"] == "Capital Markets") & (kpis["period"] <= selected_end)].sort_values("period").tail(6)
+        markets = kpis.loc[
+            (kpis["business_unit"] == "Capital Markets")
+            & kpis["period"].between(selected_start, selected_end)
+        ].sort_values("period")
         if not markets.empty:
             mix_columns = {
                 "Advisory": "advisory_mix_actual", "Underwriting": "underwriting_mix_actual",
@@ -795,12 +1055,13 @@ with st.expander("Key Business Metrics", expanded=True):
             }
             latest_mix = markets.iloc[-1]
             largest_component = max(mix_columns, key=lambda label: latest_mix[mix_columns[label]])
-            summary_text = generate_chart_summary("fee_revenue_mix", {
-                "_version": 3,
+            summary_text = generate_chart_summary("fee_revenue_mix", attach_evidence({
+                "_version": 4,
                 "business_unit": "Capital Markets", "largest_component": largest_component,
                 "largest_share": round(float(latest_mix[mix_columns[largest_component]] * 100), 1), "months": int(len(markets)),
                 "period": latest_mix["period"].strftime("%B %Y"),
-            })
+            }, [row for row in raw_period_evidence if row.get("Business Unit") == "Capital Markets"],
+                period_calculation_evidence.loc[(period_calculation_evidence["business_unit"] == "Capital Markets") & (period_calculation_evidence["metric_type"] == "Revenue")]))
             specialized_figures.append((summary_text, fee_revenue_mix_chart(markets).update_layout(height=580, margin=dict(b=112))))
     if specialized_figures:
         left_column, right_column = st.columns(2)
