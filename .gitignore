@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.venv/
+venv/
+.env
+.streamlit/secrets.toml
+*.log
+00_Source/
+US_Bank_痛点项目.docx

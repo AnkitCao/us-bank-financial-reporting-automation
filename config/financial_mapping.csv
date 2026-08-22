@@ -1,0 +1,25 @@
+business_unit,source_metric,management_category,metric_type
+Commercial Banking,Loan Interest,Net Interest Income,Revenue
+Commercial Banking,Treasury Fee,Fee / Noninterest Income,Revenue
+Commercial Banking,Deposit Fee,Fee / Noninterest Income,Revenue
+Commercial Banking,Merchant Fee,Fee / Noninterest Income,Revenue
+Commercial Banking,FX Fee,Fee / Noninterest Income,Revenue
+Commercial Banking,Operating Expense,Operating Expense,Expense
+Commercial Banking,Loan Balance,Loan Balance,Balance
+Commercial Banking,Deposit Balance,Deposit Balance,Balance
+Commercial Real Estate,Interest Income,Net Interest Income,Revenue
+Commercial Real Estate,Origination Fee,Fee / Noninterest Income,Revenue
+Commercial Real Estate,Prepayment Fee,Fee / Noninterest Income,Revenue
+Commercial Real Estate,Loan Servicing Fee,Fee / Noninterest Income,Revenue
+Commercial Real Estate,Other Fee Income,Other Revenue,Revenue
+Commercial Real Estate,Operating Expense,Operating Expense,Expense
+Commercial Real Estate,Credit Provision,Credit Provision,Credit
+Commercial Real Estate,Commercial Mortgage Balance,Commercial Mortgage Balance,Balance
+Commercial Real Estate,Nonperforming Loan Proxy,Nonperforming Loan Proxy,Balance
+Capital Markets,Advisory Fee,Fee / Noninterest Income,Revenue
+Capital Markets,Underwriting Revenue,Fee / Noninterest Income,Revenue
+Capital Markets,Trading Revenue,Trading Revenue,Revenue
+Capital Markets,Structuring Fee,Fee / Noninterest Income,Revenue
+Capital Markets,Syndication Fee,Fee / Noninterest Income,Revenue
+Capital Markets,Operating Expense,Operating Expense,Expense
+

@@ -1,0 +1,90 @@
+project:
+  name: Monthly LOB Financial Review
+  currency: USD
+  unit: millions
+  actual_window:
+    start: 2025-04-30
+    end: 2026-06-30
+  disclaimer: Synthetic demonstration data calibrated to public U.S. Bancorp trends; not internal U.S. Bank data.
+
+scenarios:
+  - Actual
+  - Budget
+  - Forecast
+  - Prior Year
+
+business_units:
+  Commercial Banking:
+    revenue_metrics:
+      - Loan Interest
+      - Treasury Fee
+      - Deposit Fee
+      - Merchant Fee
+      - FX Fee
+    balance_metrics:
+      - Loan Balance
+      - Deposit Balance
+    cost_metrics:
+      - Operating Expense
+  Commercial Real Estate:
+    revenue_metrics:
+      - Interest Income
+      - Origination Fee
+      - Prepayment Fee
+      - Loan Servicing Fee
+      - Other Fee Income
+    balance_metrics:
+      - Commercial Mortgage Balance
+      - Nonperforming Loan Proxy
+    cost_metrics:
+      - Operating Expense
+      - Credit Provision
+  Capital Markets:
+    revenue_metrics:
+      - Advisory Fee
+      - Underwriting Revenue
+      - Trading Revenue
+      - Structuring Fee
+      - Syndication Fee
+    balance_metrics: []
+    cost_metrics:
+      - Operating Expense
+
+exception_rules:
+  revenue_yoy_decline:
+    threshold: -0.10
+    severity: Red
+  expense_over_budget:
+    threshold: 0.05
+    severity: Yellow
+  credit_provision_over_forecast:
+    threshold: 0.05
+    severity: Yellow
+  trailing_12m_low_margin:
+    severity: Yellow
+  consecutive_revenue_decline:
+    months: 3
+    severity: Red
+  revenue_recovery:
+    prior_decline_months: 3
+    severity: Green
+
+public_calibration:
+  as_of: 2026-06-30
+  facts:
+    - metric: Commercial average loans
+      qoq_change: 0.050
+      yoy_change: 0.141
+      source: https://www.sec.gov/Archives/edgar/data/36104/000003610426000039/a2q26earningsrelease.htm
+    - metric: Commercial real estate average loans
+      qoq_change: 0.037
+      yoy_change: 0.058
+      source: https://www.sec.gov/Archives/edgar/data/36104/000003610426000039/a2q26earningsrelease.htm
+    - metric: Capital markets revenue
+      qoq_change: 0.358
+      yoy_change: 0.625
+      source: https://www.sec.gov/Archives/edgar/data/36104/000003610426000039/a2q26earningsrelease.htm
+    - metric: Commercial real estate nonperforming loans
+      q1_2026: 522
+      q2_2026: 568
+      source: https://www.sec.gov/Archives/edgar/data/36104/000003610426000039/a2q26earningsrelease.htm
