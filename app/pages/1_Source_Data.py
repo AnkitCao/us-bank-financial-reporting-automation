@@ -431,7 +431,7 @@ st.title("Source Data for Three Businesses")
 st.markdown(
     """
     <div class="simulated-notice">
-      <strong>Disclaimer: Data is synthetic and for demonstration purposes only, not actual U.S. Bank figures.</strong>
+      <strong>Disclaimer: All 1,380 data points are synthetic and for demonstration purposes only, not actual U.S. Bank figures.</strong>
     </div>
     """,
     unsafe_allow_html=True,
