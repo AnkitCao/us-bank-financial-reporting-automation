@@ -224,7 +224,7 @@ def source_profile_html(business_unit: str, table: pd.DataFrame, quality: pd.Ser
         profit_formula = "= " + " + ".join(revenue_fields) + " − Operating Costs − Credit Loss Provision"
         efficiency_cost = "Operating Costs"
         specialized_metric = (
-            "NPL Ratio", "= NPL Proxy ($MM) ÷ CRE Loan Bal ($MM)",
+            "NPL Ratios", "= NPL Proxy ($MM) ÷ CRE Loan Bal ($MM)",
             "Nonperforming exposure as a share of CRE loans.", "Monitor CRE asset quality across periods.",
         )
     else:
@@ -234,20 +234,20 @@ def source_profile_html(business_unit: str, table: pd.DataFrame, quality: pd.Ser
         efficiency_cost = "Operating Expense"
         if business_unit == "Commercial Banking":
             specialized_metric = (
-                "Loan-to-Deposit Ratio", "= Loan Balance ÷ Deposit Balance",
+                "Loan-to-Deposit Ratios", "= Loan Balance ÷ Deposit Balance",
                 "Loans funded per dollar of deposits.", "Monitor funding use and liquidity balance.",
             )
         else:
             specialized_metric = (
-                "Fee Revenue Mix", "= Each revenue field ÷ Total Revenue",
+                "Fee Revenue Shares", "= Each revenue field ÷ Total Revenue",
                 "Share of revenue from each Capital Markets activity.", "Monitor income concentration and diversification.",
             )
     metric_rows = [
-        ("Total Revenue", revenue_formula, "Income from all revenue fields.", "Track trends and compare Target and Prior Year."),
+        ("Total Revenues", revenue_formula, "Income from all revenue fields.", "Track trends and compare Target and Prior Year."),
         (cost_defined, cost_formula, "Costs deducted from revenue.", "Track spending and budget variance."),
-        ("Operating Profit", profit_formula, "Revenue remaining after costs.", "Track profit margin and business performance."),
-        ("Cost-to-Income Ratio", f"= {efficiency_cost} ÷ Total Revenue", "Operating cost per dollar of revenue.", "Compare efficiency across businesses and periods."),
-        ("Profit Margin", "= Operating Profit ÷ Total Revenue", "Profit retained per dollar of revenue.", "Compare profitability across businesses and periods."),
+        ("Operating Profits", profit_formula, "Revenue remaining after costs.", "Track profit margin and business performance."),
+        ("Cost-to-Income Ratios", f"= {efficiency_cost} ÷ Total Revenue", "Operating cost per dollar of revenue.", "Compare efficiency across businesses and periods."),
+        ("Profit Margins", "= Operating Profit ÷ Total Revenue", "Profit retained per dollar of revenue.", "Compare profitability across businesses and periods."),
         specialized_metric,
         (metric_lines(profile["guardrail_metrics"]), "= 0 in Revenue and Profit", "Balance or risk measures; not income.", "Monitor scale or risk without overstating profit."),
     ]

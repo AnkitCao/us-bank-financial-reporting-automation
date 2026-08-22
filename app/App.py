@@ -294,7 +294,7 @@ def trend_chart(kpis: pd.DataFrame, selected_units: list[str]) -> go.Figure:
         )
     fig.update_yaxes(title="Revenue ($M)")
     fig.update_layout(showlegend=True)
-    return base_layout(fig, "Revenue Trend", f"= Sum of Revenue Metrics, {format_chart_period_range(kpis)}")
+    return base_layout(fig, "Revenue Trends", f"= Sum of Revenue Metrics, {format_chart_period_range(kpis)}")
 
 
 def cost_income_trend_chart(kpis: pd.DataFrame, selected_units: list[str]) -> go.Figure:
@@ -309,7 +309,7 @@ def cost_income_trend_chart(kpis: pd.DataFrame, selected_units: list[str]) -> go
         ))
     fig.update_yaxes(title="Cost / Income", tickformat=".0%", rangemode="tozero")
     fig.update_layout(showlegend=True)
-    return base_layout(fig, "Cost to Income Ratio", f"= Operating Expense ÷ Total Revenue, {format_chart_period_range(kpis)}")
+    return base_layout(fig, "Cost-to-Income Ratios", f"= Operating Expense ÷ Total Revenue, {format_chart_period_range(kpis)}")
 
 
 def profit_margin_comparison_chart(period_frame: pd.DataFrame, period_label: str) -> go.Figure:
@@ -333,7 +333,7 @@ def profit_margin_comparison_chart(period_frame: pd.DataFrame, period_label: str
     upper = max(frame["profit_margin_actual"].max(), frame["profit_margin_budget"].max()) * 1.22
     fig.update_yaxes(title="Profit Margin", tickformat=".0%", range=[0, upper])
     fig.update_layout(barmode="group", bargap=0.46, bargroupgap=0.12)
-    return base_layout(fig, "Profit Margin by Business Unit", f"= Adjusted Profit ÷ Total Revenue, {period_label}")
+    return base_layout(fig, "Profit Margins by Business Units", f"= Adjusted Profit ÷ Total Revenue, {period_label}")
 
 
 def single_ratio_trend_chart(frame: pd.DataFrame, column: str, title: str, subtitle: str, threshold: float | None = None) -> go.Figure:
@@ -377,7 +377,7 @@ def fee_revenue_mix_chart(frame: pd.DataFrame) -> go.Figure:
         ))
     fig.update_yaxes(title="Revenue Mix", tickformat=".0%", range=[0, 1])
     fig.update_layout(barmode="stack", bargap=0.35)
-    fig = base_layout(fig, "Fee Revenue Mix (Capital Markets)", f"= Fee Component ÷ Total Fee Revenue, {format_chart_period_range(frame)}")
+    fig = base_layout(fig, "Fee Revenue Shares (Capital Markets)", f"= Fee Component ÷ Total Fee Revenue, {format_chart_period_range(frame)}")
     fig.update_layout(
         legend=dict(orientation="h", yanchor="top", y=-0.17, xanchor="center", x=0.5, font=dict(size=17)),
         margin=dict(l=92, r=48, t=174, b=108),
@@ -434,7 +434,7 @@ def waterfall_chart(detail: pd.DataFrame, period_label: str) -> go.Figure:
     fig.update_xaxes(title="Contribution to Revenue Variance ($M)", range=x_range, zeroline=False)
     fig.update_yaxes(title="", tickfont=dict(size=19), automargin=True)
     fig.update_layout(showlegend=False, bargap=0.38)
-    return base_layout(fig, "Revenue vs. Target", f"= Actual − Target, {period_label}")
+    return base_layout(fig, "Revenue Results vs. Targets", f"= Actual − Target, {period_label}")
 
 
 def performance_colors(values: pd.Series) -> list[str]:
@@ -463,7 +463,7 @@ def revenue_bar_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
         )
     fig.update_yaxes(title="Revenue ($M)")
     fig.update_layout(bargap=0.48)
-    return base_layout(fig, "Revenue by Business Unit", f"= Sum of Actual Revenue Metrics, {period_label}")
+    return base_layout(fig, "Revenues by Business Units", f"= Sum of Actual Revenue Metrics, {period_label}")
 
 
 def profit_bar_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
@@ -481,7 +481,7 @@ def profit_bar_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
         )
     fig.update_yaxes(title="Adjusted Profit ($M)")
     fig.update_layout(bargap=0.48)
-    return base_layout(fig, "Adjusted Profit by Business Unit", f"= Revenue − Operating Expense − Credit Provision (where applicable), {period_label}")
+    return base_layout(fig, "Adjusted Profits by Business Units", f"= Revenue − Operating Expense − Credit Provision (where applicable), {period_label}")
 
 
 def expense_comparison_chart(current: pd.DataFrame, period_label: str) -> go.Figure:
@@ -517,7 +517,7 @@ def expense_comparison_chart(current: pd.DataFrame, period_label: str) -> go.Fig
     upper = max(frame["operating_expense_actual"].max(), frame["operating_expense_budget"].max()) * 1.24
     fig.update_yaxes(title="Operating Expense ($M)", range=[0, upper])
     fig.update_layout(barmode="group", bargap=0.50, bargroupgap=0.28)
-    return base_layout(fig, "Operating Expense vs. Budget", f"= Actual Operating Expense − Budget Operating Expense, {period_label}")
+    return base_layout(fig, "Operating Expenses vs. Budgets", f"= Actual Operating Expense − Budget Operating Expense, {period_label}")
 
 
 def aggregate_kpis(frame: pd.DataFrame) -> pd.DataFrame:
@@ -588,13 +588,13 @@ def render_business_model_metrics(current: pd.DataFrame) -> None:
         unit = row["business_unit"]
         if unit == "Commercial Banking":
             specialized = [(
-                "Loan-to-Deposit Ratio",
+                "Loan-to-Deposit Ratios",
                 "= Loan Balance ÷ Deposit Balance",
                 f"{row['loan_to_deposit_ratio_actual']:.1%}",
             )]
         elif unit == "Commercial Real Estate":
             specialized = [(
-                "NPL Ratio",
+                "NPL Ratios",
                 "= NPL Proxy ÷ CRE Loan Balance",
                 f"{row['npl_ratio_actual']:.2%}",
             )]
@@ -807,9 +807,9 @@ with st.sidebar:
           <div class="overview-toc-title">Contents</div>
           <a href="#executive-summary">1. AI Executive Summary</a>
           <a href="#attention">2. Items Requiring Attention</a>
-          <a href="#scorecard">3. Business Unit Scorecard</a>
+          <a href="#scorecard">3. Business Unit Scorecards</a>
           <a href="#business-model-metrics">4. Defined Metrics</a>
-          <a href="#total-trend">5. Total Trend</a>
+          <a href="#total-trend">5. Total Trends</a>
           <a href="#key-business-metrics">6. Key Business Metrics</a>
         </nav>
         """,
@@ -887,10 +887,10 @@ total_budget = current["revenue_budget"].sum()
 total_profit = current["adjusted_profit_actual"].sum()
 total_expense = current["operating_expense_actual"].sum()
 cards = st.columns(4, gap="medium")
-cards[0].metric("Revenue", fmt_money(total_revenue), f"{(total_revenue / total_budget - 1):+.1%} vs. target")
-cards[1].metric("Adjusted Profit", fmt_money(total_profit), f"{(total_profit / current['adjusted_profit_budget'].sum() - 1):+.1%} vs. target")
-cards[2].metric("Operating Expense", fmt_money(total_expense), f"{(total_expense / current['operating_expense_budget'].sum() - 1):+.1%} vs. budget", delta_color="inverse")
-cards[3].metric("Target Achieved", f"{total_revenue / total_budget:.1%}")
+cards[0].metric("Revenues", fmt_money(total_revenue), f"{(total_revenue / total_budget - 1):+.1%} vs. target")
+cards[1].metric("Adjusted Profits", fmt_money(total_profit), f"{(total_profit / current['adjusted_profit_budget'].sum() - 1):+.1%} vs. target")
+cards[2].metric("Operating Expenses", fmt_money(total_expense), f"{(total_expense / current['operating_expense_budget'].sum() - 1):+.1%} vs. budget", delta_color="inverse")
+cards[3].metric("Targets Achieved", f"{total_revenue / total_budget:.1%}")
 
 st.markdown("<div id='attention' class='section-anchor'></div>", unsafe_allow_html=True)
 st.markdown(
@@ -921,7 +921,7 @@ for business_unit in selected_units:
     )
 
 st.markdown("<div id='scorecard' class='section-anchor'></div>", unsafe_allow_html=True)
-st.subheader("Business Unit Scorecard")
+st.subheader("Business Unit Scorecards")
 render_scorecard(scorecard_rows(current))
 st.markdown("<div id='business-model-metrics' class='section-anchor'></div>", unsafe_allow_html=True)
 st.subheader("Defined Metrics")
@@ -982,7 +982,7 @@ expense_summary = generate_chart_summary("expense_variance", attach_evidence({
 }, raw_period_evidence, selected_detail.loc[selected_detail["metric_type"] == "Expense"]))
 
 st.markdown("<div id='total-trend' class='section-anchor'></div>", unsafe_allow_html=True)
-with st.expander("Total Trend", expanded=True):
+with st.expander("Total Trends", expanded=True):
     revenue_trend_view, efficiency_trend_view = st.columns(2)
     with revenue_trend_view:
         st.plotly_chart(
@@ -1025,7 +1025,7 @@ with st.expander("Key Business Metrics", expanded=True):
             }, [row for row in raw_trend_evidence if row.get("Business Unit") == "Commercial Real Estate"],
                 trend_detail.loc[trend_detail["business_unit"] == "Commercial Real Estate"]))
             specialized_figures.append((summary_text, single_ratio_trend_chart(
-                cre, "npl_ratio_actual", "NPL Ratio (Commercial Real Estate)",
+                cre, "npl_ratio_actual", "NPL Ratios (Commercial Real Estate)",
                 "= NPL Proxy ÷ CRE Loan Balance", threshold=0.015,
             ).update_layout(height=580)))
     if "Commercial Banking" in selected_units:
@@ -1040,7 +1040,7 @@ with st.expander("Key Business Metrics", expanded=True):
             }, [row for row in raw_trend_evidence if row.get("Business Unit") == "Commercial Banking"],
                 trend_detail.loc[trend_detail["business_unit"] == "Commercial Banking"]))
             specialized_figures.append((summary_text, single_ratio_trend_chart(
-                banking, "loan_to_deposit_ratio_actual", "Loan to Deposit Ratio (Commercial Banking)",
+                banking, "loan_to_deposit_ratio_actual", "Loan-to-Deposit Ratios (Commercial Banking)",
                 "= Loan Balance ÷ Deposit Balance",
             ).update_layout(height=580)))
     if "Capital Markets" in selected_units:

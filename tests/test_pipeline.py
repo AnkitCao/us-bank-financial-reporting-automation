@@ -8,6 +8,12 @@ from src.clean_data import _finalize_ledger, _require_columns, clean_all_sources
 from src.detect_exceptions import detect_exceptions
 from src.generate_data import generate_raw_packages
 from src.map_financials import apply_financial_mapping
+from src.source_structure import (
+    SourcePendingReviewError,
+    classify_source_structure,
+    require_approved_source,
+    require_approved_source_directory,
+)
 
 
 def test_pipeline_has_complete_scenario_coverage(tmp_path):
@@ -141,3 +147,32 @@ def test_unresolved_required_fields_stop_cleaning():
     """Unknown schemas must be quarantined rather than silently guessed."""
     with pytest.raises(ValueError, match="Unresolved required fields"):
         _require_columns(pd.DataFrame({"mystery": [1]}), ["period"], "new_file.xlsx")
+
+
+def test_known_sources_are_routed_to_approved_parsers(tmp_path):
+    generate_raw_packages(tmp_path)
+    expected = {
+        "commercial_banking_monthly.xlsx": ("long_table", "commercial_banking_long"),
+        "commercial_real_estate_monthly.xlsx": ("wide_table", "commercial_real_estate_wide"),
+        "capital_markets_monthly.xlsx": ("cross_tab_workbook", "capital_markets_cross_tab"),
+    }
+    for filename, (structure, parser) in expected.items():
+        decision = classify_source_structure(tmp_path / filename)
+        assert decision.status == "Approved"
+        assert (decision.structure, decision.parser) == (structure, parser)
+
+
+def test_unrecognized_business_source_requires_human_approval(tmp_path):
+    path = tmp_path / "new_business_line.xlsx"
+    pd.DataFrame({"Date": ["2026-01-31"], "Metric": ["Revenue"], "Amount": [1.0]}).to_excel(path, index=False)
+    decision = classify_source_structure(path)
+    assert decision.status == "Pending Review"
+    with pytest.raises(SourcePendingReviewError, match="Pending Review"):
+        require_approved_source(path, "commercial_banking_long")
+
+
+def test_pipeline_does_not_silently_ignore_an_unrecognized_workbook(tmp_path):
+    generate_raw_packages(tmp_path)
+    pd.DataFrame({"Unknown": [1]}).to_excel(tmp_path / "fourth_business.xlsx", index=False)
+    with pytest.raises(SourcePendingReviewError, match="fourth_business.xlsx"):
+        require_approved_source_directory(tmp_path)

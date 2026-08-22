@@ -9,6 +9,7 @@ import pandas as pd
 
 from src.llm_data_quality import review_outlier_candidates, review_semantic_mappings
 from src.paths import RAW_DIR
+from src.source_structure import require_approved_source, require_approved_source_directory
 
 SCENARIO_NAMES = {"actual": "Actual", "budget": "Budget", "forecast": "Forecast", "prior year": "Prior Year"}
 LEDGER_KEY = ["business_unit", "period", "scenario", "source_metric"]
@@ -22,6 +23,7 @@ def quality_rule_catalog() -> pd.DataFrame:
     return pd.DataFrame(
         [
             ("Column aliases", "Apply approved aliases; LLM reviews unfamiliar headers against an allowlist; reject unresolved required fields."),
+            ("Source structures", "Classify headers and sample rows once; use only an approved parser route; quarantine new sources or unsupported structures."),
             ("Scenario labels", "Normalize known labels; LLM reviews unfamiliar spellings against the allowed scenarios; reject unresolved labels."),
             ("Missing amounts", "Sort by month and linearly interpolate only within the same business, metric and scenario; fail if unresolved."),
             ("Exact duplicates", "Remove rows only when every standardized field and amount is identical."),
@@ -153,6 +155,7 @@ def _finalize_ledger(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean_commercial_banking(path: Path) -> pd.DataFrame:
+    require_approved_source(path, "commercial_banking_long")
     frame = pd.read_excel(path, sheet_name="Monthly Detail")
     frame = _rename_aliases(frame, {
         "date": "period", "reportingdate": "period", "metric": "source_metric", "measurename": "source_metric",
@@ -166,6 +169,7 @@ def clean_commercial_banking(path: Path) -> pd.DataFrame:
 
 
 def clean_commercial_real_estate(path: Path) -> pd.DataFrame:
+    require_approved_source(path, "commercial_real_estate_wide")
     frame = pd.read_excel(path, sheet_name="CRE Monthly")
     frame = _rename_aliases(frame, {
         "period": "period", "reportmonth": "period", "case": "scenario", "plancase": "scenario",
@@ -193,6 +197,7 @@ def clean_commercial_real_estate(path: Path) -> pd.DataFrame:
 
 
 def clean_capital_markets(path: Path) -> pd.DataFrame:
+    require_approved_source(path, "capital_markets_cross_tab")
     workbook = pd.ExcelFile(path)
     frames: list[pd.DataFrame] = []
     for sheet_name in workbook.sheet_names:
@@ -216,6 +221,7 @@ def clean_capital_markets(path: Path) -> pd.DataFrame:
 
 
 def clean_all_sources(raw_dir: Path = RAW_DIR) -> pd.DataFrame:
+    require_approved_source_directory(raw_dir)
     frames = [
         clean_commercial_banking(raw_dir / "commercial_banking_monthly.xlsx"),
         clean_commercial_real_estate(raw_dir / "commercial_real_estate_monthly.xlsx"),
