@@ -1,0 +1,8 @@
+issue_type,deterministic_repair_rule
+Column aliases,"Normalize case/spacing/punctuation, then map only approved source aliases to the canonical schema."
+Scenario labels,"Trim whitespace, collapse spaces and map approved labels to Actual, Budget, Forecast or Prior Year."
+Missing amounts,"Sort by month and linearly interpolate only within the same business, metric and scenario; fail if unresolved."
+Exact duplicates,Remove rows only when every standardized field and amount is identical.
+Conflicting keys,"Fail the pipeline when non-identical rows share business, month, scenario and metric."
+Extreme values,"Within the same business, metric and scenario, flag values beyond the median/MAD robust range, then interpolate in-group."
+Dates,Parse source dates and standardize them to month end; fail when a required date cannot be parsed.

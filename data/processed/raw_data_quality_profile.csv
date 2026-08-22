@@ -1,0 +1,4 @@
+business_unit,structure,rows,columns,missing_values,duplicate_rows,duplicate_keys,outliers,label_issues,column_aliases,problem_records,problem_rate
+Commercial Banking,Long table,492,5,8,12,12,5,9,5,34,0.06910569105691057
+Commercial Real Estate,Wide table,63,11,2,3,3,2,2,6,9,0.14285714285714285
+Capital Markets,Cross tab wide workbook,26,17,2,2,2,2,2,2,8,0.3076923076923077

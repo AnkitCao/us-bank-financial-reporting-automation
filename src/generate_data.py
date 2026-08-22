@@ -63,7 +63,25 @@ def _commercial_banking(rng: np.random.Generator) -> pd.DataFrame:
                         "Unit": "USD millions",
                     }
                 )
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    # Fixed row positions make a realistic issue rate reproducible without touching the latest reporting month.
+    frame.loc[[10, 45, 78, 111, 146, 179, 212, 245], "Amount"] = np.nan
+    for index in [100, 135, 170, 205, 240]:
+        frame.loc[index, "Amount"] = round(frame.loc[index, "Amount"] * 20, 3)
+    for index in [5, 70, 139, 204, 273, 338, 407, 446]:
+        frame.loc[index, "Scenario"] = f" {str(frame.loc[index, 'Scenario']).lower()} "
+    frame.loc[6, "Metric"] = f"{frame.loc[6, 'Metric']} "
+    duplicate_indices = [20, 55, 90, 125, 160, 195, 230, 265, 300, 335, 370, 405]
+    frame = pd.concat([frame, frame.iloc[duplicate_indices]], ignore_index=True)
+    return frame.rename(
+        columns={
+            "Date": "Reporting Date ",
+            "Metric": "Measure Name",
+            "Scenario": "Plan Type",
+            "Amount": "Value_MM",
+            "Unit": "Currency Unit",
+        }
+    )
 
 
 def _commercial_real_estate(rng: np.random.Generator) -> pd.DataFrame:
@@ -99,7 +117,24 @@ def _commercial_real_estate(rng: np.random.Generator) -> pd.DataFrame:
                     amount = round(actual / 1.10, 3)
                 row[metric] = amount
             rows.append(row)
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    frame.loc[8, "Prepay Fee"] = np.nan
+    frame.loc[21, "NII"] = np.nan
+    frame.loc[30, "Opex"] = round(frame.loc[30, "Opex"] * 15, 3)
+    frame.loc[43, "Orig Fee"] = round(frame.loc[43, "Orig Fee"] * 18, 3)
+    for index in [17, 34]:
+        frame.loc[index, "Case"] = f" {str(frame.loc[index, 'Case']).lower()} "
+    frame = pd.concat([frame, frame.iloc[[12, 25, 48]]], ignore_index=True)
+    return frame.rename(
+        columns={
+            "Period": "Report Month",
+            "Case": "Plan Case",
+            "NII": "Net Interest Income",
+            "Orig Fee": "Origination Fees",
+            "Prepay Fee": "Prepayment Fees",
+            "Opex": "Operating Costs",
+        }
+    )
 
 
 def _capital_markets(rng: np.random.Generator) -> dict[str, pd.DataFrame]:
@@ -132,6 +167,16 @@ def _capital_markets(rng: np.random.Generator) -> dict[str, pd.DataFrame]:
                 row[period.strftime("%b-%y")] = amount
             records.append(row)
         sheets[metric] = pd.DataFrame(records)
+    sheets["Advisory Fee"].loc[1, "May-25"] = np.nan
+    sheets["Underwriting Revenue"].loc[3, "Oct-25"] = np.nan
+    sheets["Trading Revenue"].loc[0, "Sep-25"] = round(sheets["Trading Revenue"].loc[0, "Sep-25"] * 20, 3)
+    sheets["Operating Expense"].loc[2, "Dec-25"] = round(sheets["Operating Expense"].loc[2, "Dec-25"] * 16, 3)
+    sheets["Structuring Fee"].loc[2, "Scenario"] = " forecast "
+    sheets["Advisory Fee"].loc[3, "Scenario"] = " prior year "
+    sheets["Syndication Fee"] = pd.concat([sheets["Syndication Fee"], sheets["Syndication Fee"].iloc[[1]]], ignore_index=True)
+    sheets["Operating Expense"] = pd.concat([sheets["Operating Expense"], sheets["Operating Expense"].iloc[[0]]], ignore_index=True)
+    for metric, frame in sheets.items():
+        frame.rename(columns={"Scenario": "Plan Scenario", "Apr-25": "Apr_25"}, inplace=True)
     return sheets
 
 

@@ -5,7 +5,7 @@ Capital Markets,2025-04-30,Structuring Fee,Fee / Noninterest Income,Revenue,0.77
 Capital Markets,2025-04-30,Syndication Fee,Fee / Noninterest Income,Revenue,0.65,0.639,0.656,0.608,0.01100000000000001,-0.006000000000000005
 Capital Markets,2025-04-30,Trading Revenue,Trading Revenue,Revenue,1.982,1.973,1.994,1.86,0.008999999999999897,-0.01200000000000001
 Capital Markets,2025-04-30,Underwriting Revenue,Fee / Noninterest Income,Revenue,2.651,2.598,2.622,2.462,0.052999999999999936,0.028999999999999915
-Capital Markets,2025-05-31,Advisory Fee,Fee / Noninterest Income,Revenue,2.215,2.219,2.235,2.077,-0.0040000000000000036,-0.020000000000000018
+Capital Markets,2025-05-31,Advisory Fee,Fee / Noninterest Income,Revenue,2.215,2.1515,2.235,2.077,0.06349999999999989,-0.020000000000000018
 Capital Markets,2025-05-31,Operating Expense,Operating Expense,Expense,3.55,3.54,3.54,3.307,0.009999999999999787,0.009999999999999787
 Capital Markets,2025-05-31,Structuring Fee,Fee / Noninterest Income,Revenue,0.758,0.753,0.76,0.712,0.0050000000000000044,-0.0020000000000000018
 Capital Markets,2025-05-31,Syndication Fee,Fee / Noninterest Income,Revenue,0.63,0.638,0.637,0.596,-0.008000000000000007,-0.007000000000000006
@@ -33,14 +33,14 @@ Capital Markets,2025-09-30,Advisory Fee,Fee / Noninterest Income,Revenue,1.988,1
 Capital Markets,2025-09-30,Operating Expense,Operating Expense,Expense,3.175,3.141,3.211,2.987,0.03399999999999981,-0.03600000000000003
 Capital Markets,2025-09-30,Structuring Fee,Fee / Noninterest Income,Revenue,0.685,0.678,0.677,0.641,0.007000000000000006,0.008000000000000007
 Capital Markets,2025-09-30,Syndication Fee,Fee / Noninterest Income,Revenue,0.576,0.559,0.568,0.533,0.016999999999999904,0.008000000000000007
-Capital Markets,2025-09-30,Trading Revenue,Trading Revenue,Revenue,1.751,1.729,1.739,1.657,0.021999999999999797,0.011999999999999789
+Capital Markets,2025-09-30,Trading Revenue,Trading Revenue,Revenue,1.786,1.729,1.739,1.657,0.05699999999999994,0.04699999999999993
 Capital Markets,2025-09-30,Underwriting Revenue,Fee / Noninterest Income,Revenue,2.311,2.322,2.31,2.188,-0.01100000000000012,0.0009999999999998899
 Capital Markets,2025-10-31,Advisory Fee,Fee / Noninterest Income,Revenue,2.109,2.082,2.094,1.985,0.027000000000000135,0.015000000000000124
 Capital Markets,2025-10-31,Operating Expense,Operating Expense,Expense,3.403,3.322,3.347,3.157,0.08099999999999996,0.05600000000000005
 Capital Markets,2025-10-31,Structuring Fee,Fee / Noninterest Income,Revenue,0.718,0.717,0.732,0.691,0.0010000000000000009,-0.014000000000000012
 Capital Markets,2025-10-31,Syndication Fee,Fee / Noninterest Income,Revenue,0.601,0.59,0.601,0.576,0.01100000000000001,0.0
 Capital Markets,2025-10-31,Trading Revenue,Trading Revenue,Revenue,1.871,1.817,1.859,1.753,0.05400000000000005,0.01200000000000001
-Capital Markets,2025-10-31,Underwriting Revenue,Fee / Noninterest Income,Revenue,2.497,2.456,2.438,2.316,0.040999999999999925,0.05899999999999972
+Capital Markets,2025-10-31,Underwriting Revenue,Fee / Noninterest Income,Revenue,2.497,2.456,2.438,2.3310000000000004,0.040999999999999925,0.05899999999999972
 Capital Markets,2025-11-30,Advisory Fee,Fee / Noninterest Income,Revenue,2.252,2.202,2.218,2.107,0.04999999999999982,0.03399999999999981
 Capital Markets,2025-11-30,Operating Expense,Operating Expense,Expense,3.592,3.518,3.556,3.344,0.07400000000000029,0.03600000000000003
 Capital Markets,2025-11-30,Structuring Fee,Fee / Noninterest Income,Revenue,0.772,0.75,0.766,0.72,0.02200000000000002,0.006000000000000005
@@ -48,7 +48,7 @@ Capital Markets,2025-11-30,Syndication Fee,Fee / Noninterest Income,Revenue,0.63
 Capital Markets,2025-11-30,Trading Revenue,Trading Revenue,Revenue,1.98,1.955,1.929,1.858,0.02499999999999991,0.050999999999999934
 Capital Markets,2025-11-30,Underwriting Revenue,Fee / Noninterest Income,Revenue,2.626,2.588,2.581,2.474,0.03799999999999981,0.04499999999999993
 Capital Markets,2025-12-31,Advisory Fee,Fee / Noninterest Income,Revenue,2.279,2.26,2.266,2.126,0.019000000000000128,0.0129999999999999
-Capital Markets,2025-12-31,Operating Expense,Operating Expense,Expense,3.665,3.562,3.612,3.405,0.1030000000000002,0.052999999999999936
+Capital Markets,2025-12-31,Operating Expense,Operating Expense,Expense,3.665,3.562,3.5460000000000003,3.405,0.1030000000000002,0.11899999999999977
 Capital Markets,2025-12-31,Structuring Fee,Fee / Noninterest Income,Revenue,0.781,0.77,0.782,0.745,0.01100000000000001,-0.0010000000000000009
 Capital Markets,2025-12-31,Syndication Fee,Fee / Noninterest Income,Revenue,0.66,0.643,0.649,0.613,0.017000000000000015,0.01100000000000001
 Capital Markets,2025-12-31,Trading Revenue,Trading Revenue,Revenue,2.018,1.977,2.011,1.878,0.0409999999999997,0.006999999999999673
@@ -102,7 +102,7 @@ Commercial Banking,2025-05-31,Deposit Fee,Fee / Noninterest Income,Revenue,0.946
 Commercial Banking,2025-05-31,FX Fee,Fee / Noninterest Income,Revenue,0.499,0.49,0.495,0.46,0.009000000000000008,0.0040000000000000036
 Commercial Banking,2025-05-31,Loan Balance,Loan Balance,Balance,1695.214,1672.537,1696.26,1580.356,22.676999999999907,-1.0460000000000491
 Commercial Banking,2025-05-31,Loan Interest,Net Interest Income,Revenue,5.712,5.709,5.729,5.381,0.0030000000000001137,-0.017000000000000348
-Commercial Banking,2025-05-31,Merchant Fee,Fee / Noninterest Income,Revenue,1.215,1.193,1.217,1.136,0.02200000000000002,-0.0020000000000000018
+Commercial Banking,2025-05-31,Merchant Fee,Fee / Noninterest Income,Revenue,1.215,1.185,1.217,1.136,0.030000000000000027,-0.0020000000000000018
 Commercial Banking,2025-05-31,Operating Expense,Operating Expense,Expense,3.91,3.817,3.95,3.667,0.09299999999999997,-0.040000000000000036
 Commercial Banking,2025-05-31,Treasury Fee,Fee / Noninterest Income,Revenue,2.388,2.399,2.397,2.235,-0.01100000000000012,-0.008999999999999897
 Commercial Banking,2025-06-30,Deposit Balance,Deposit Balance,Balance,1522.718,1520.804,1527.015,1453.542,1.9139999999999873,-4.2970000000000255
@@ -110,7 +110,7 @@ Commercial Banking,2025-06-30,Deposit Fee,Fee / Noninterest Income,Revenue,0.956
 Commercial Banking,2025-06-30,FX Fee,Fee / Noninterest Income,Revenue,0.493,0.489,0.494,0.465,0.0040000000000000036,-0.0010000000000000009
 Commercial Banking,2025-06-30,Loan Balance,Loan Balance,Balance,1726.383,1695.437,1700.946,1597.786,30.94600000000014,25.437000000000126
 Commercial Banking,2025-06-30,Loan Interest,Net Interest Income,Revenue,5.757,5.76,5.75,5.393,-0.0030000000000001137,0.006999999999999673
-Commercial Banking,2025-06-30,Merchant Fee,Fee / Noninterest Income,Revenue,1.207,1.208,1.225,1.159,-0.0009999999999998899,-0.018000000000000016
+Commercial Banking,2025-06-30,Merchant Fee,Fee / Noninterest Income,Revenue,1.207,1.208,1.219,1.159,-0.0009999999999998899,-0.01200000000000001
 Commercial Banking,2025-06-30,Operating Expense,Operating Expense,Expense,3.968,3.847,3.991,3.774,0.121,-0.02300000000000013
 Commercial Banking,2025-06-30,Treasury Fee,Fee / Noninterest Income,Revenue,2.452,2.416,2.448,2.28,0.03600000000000003,0.0040000000000000036
 Commercial Banking,2025-07-31,Deposit Balance,Deposit Balance,Balance,1546.782,1521.924,1528.165,1449.646,24.857999999999947,18.616999999999962
@@ -118,20 +118,20 @@ Commercial Banking,2025-07-31,Deposit Fee,Fee / Noninterest Income,Revenue,0.945
 Commercial Banking,2025-07-31,FX Fee,Fee / Noninterest Income,Revenue,0.497,0.493,0.497,0.465,0.0040000000000000036,0.0
 Commercial Banking,2025-07-31,Loan Balance,Loan Balance,Balance,1726.461,1706.656,1719.048,1609.997,19.805000000000064,7.413000000000011
 Commercial Banking,2025-07-31,Loan Interest,Net Interest Income,Revenue,5.778,5.776,5.792,5.454,0.0019999999999997797,-0.014000000000000234
-Commercial Banking,2025-07-31,Merchant Fee,Fee / Noninterest Income,Revenue,1.235,1.223,1.221,1.15,0.01200000000000001,0.014000000000000012
+Commercial Banking,2025-07-31,Merchant Fee,Fee / Noninterest Income,Revenue,1.235,1.223,1.221,1.1520000000000001,0.01200000000000001,0.014000000000000012
 Commercial Banking,2025-07-31,Operating Expense,Operating Expense,Expense,3.978,3.852,3.99,3.76,0.12600000000000033,-0.01200000000000001
-Commercial Banking,2025-07-31,Treasury Fee,Fee / Noninterest Income,Revenue,2.436,2.413,2.433,2.291,0.02300000000000013,0.0030000000000001137
+Commercial Banking,2025-07-31,Treasury Fee,Fee / Noninterest Income,Revenue,2.441,2.413,2.433,2.291,0.028000000000000025,0.008000000000000007
 Commercial Banking,2025-08-31,Deposit Balance,Deposit Balance,Balance,1528.162,1517.43,1533.184,1430.876,10.731999999999971,-5.0219999999999345
 Commercial Banking,2025-08-31,Deposit Fee,Fee / Noninterest Income,Revenue,0.94,0.93,0.944,0.888,0.009999999999999898,-0.0040000000000000036
-Commercial Banking,2025-08-31,FX Fee,Fee / Noninterest Income,Revenue,0.497,0.491,0.488,0.462,0.006000000000000005,0.009000000000000008
+Commercial Banking,2025-08-31,FX Fee,Fee / Noninterest Income,Revenue,0.497,0.491,0.494,0.462,0.006000000000000005,0.0030000000000000027
 Commercial Banking,2025-08-31,Loan Balance,Loan Balance,Balance,1717.974,1717.372,1725.732,1641.865,0.6019999999998618,-7.758000000000038
 Commercial Banking,2025-08-31,Loan Interest,Net Interest Income,Revenue,5.756,5.765,5.733,5.449,-0.008999999999999453,0.023000000000000576
 Commercial Banking,2025-08-31,Merchant Fee,Fee / Noninterest Income,Revenue,1.226,1.204,1.21,1.145,0.02200000000000002,0.016000000000000014
 Commercial Banking,2025-08-31,Operating Expense,Operating Expense,Expense,3.971,3.834,3.97,3.755,0.137,0.0009999999999998899
-Commercial Banking,2025-08-31,Treasury Fee,Fee / Noninterest Income,Revenue,2.43,2.394,2.431,2.261,0.03600000000000003,-0.0009999999999998899
+Commercial Banking,2025-08-31,Treasury Fee,Fee / Noninterest Income,Revenue,2.43,2.394,2.431,2.2805,0.03600000000000003,-0.0009999999999998899
 Commercial Banking,2025-09-30,Deposit Balance,Deposit Balance,Balance,1523.804,1512.624,1514.375,1413.82,11.180000000000064,9.429000000000087
-Commercial Banking,2025-09-30,Deposit Fee,Fee / Noninterest Income,Revenue,0.934,0.934,0.94,0.881,0.0,-0.005999999999999894
-Commercial Banking,2025-09-30,FX Fee,Fee / Noninterest Income,Revenue,0.489,0.485,0.491,0.458,0.0040000000000000036,-0.0020000000000000018
+Commercial Banking,2025-09-30,Deposit Fee,Fee / Noninterest Income,Revenue,0.934,0.934,0.935,0.881,0.0,-0.0010000000000000009
+Commercial Banking,2025-09-30,FX Fee,Fee / Noninterest Income,Revenue,0.489,0.485,0.491,0.4575,0.0040000000000000036,-0.0020000000000000018
 Commercial Banking,2025-09-30,Loan Balance,Loan Balance,Balance,1719.562,1670.742,1687.488,1590.791,48.819999999999936,32.07399999999984
 Commercial Banking,2025-09-30,Loan Interest,Net Interest Income,Revenue,5.726,5.656,5.743,5.374,0.07000000000000028,-0.017000000000000348
 Commercial Banking,2025-09-30,Merchant Fee,Fee / Noninterest Income,Revenue,1.216,1.202,1.194,1.14,0.014000000000000012,0.02200000000000002
@@ -142,16 +142,16 @@ Commercial Banking,2025-10-31,Deposit Fee,Fee / Noninterest Income,Revenue,0.929
 Commercial Banking,2025-10-31,FX Fee,Fee / Noninterest Income,Revenue,0.49,0.477,0.483,0.453,0.013000000000000012,0.007000000000000006
 Commercial Banking,2025-10-31,Loan Balance,Loan Balance,Balance,1710.719,1667.565,1681.241,1592.343,43.153999999999996,29.478000000000065
 Commercial Banking,2025-10-31,Loan Interest,Net Interest Income,Revenue,5.666,5.579,5.662,5.33,0.08700000000000063,0.004000000000000448
-Commercial Banking,2025-10-31,Merchant Fee,Fee / Noninterest Income,Revenue,1.2,1.169,1.184,1.117,0.030999999999999917,0.016000000000000014
-Commercial Banking,2025-10-31,Operating Expense,Operating Expense,Expense,3.877,3.772,3.873,3.688,0.10499999999999998,0.0039999999999995595
+Commercial Banking,2025-10-31,Merchant Fee,Fee / Noninterest Income,Revenue,1.2,1.1945000000000001,1.184,1.117,0.005499999999999838,0.016000000000000014
+Commercial Banking,2025-10-31,Operating Expense,Operating Expense,Expense,3.933,3.772,3.873,3.688,0.16100000000000003,0.05999999999999961
 Commercial Banking,2025-10-31,Treasury Fee,Fee / Noninterest Income,Revenue,2.38,2.332,2.356,2.246,0.04800000000000004,0.02400000000000002
 Commercial Banking,2025-11-30,Deposit Balance,Deposit Balance,Balance,1520.457,1488.577,1475.481,1429.873,31.88000000000011,44.97600000000011
 Commercial Banking,2025-11-30,Deposit Fee,Fee / Noninterest Income,Revenue,0.925,0.904,0.922,0.869,0.02100000000000002,0.0030000000000000027
-Commercial Banking,2025-11-30,FX Fee,Fee / Noninterest Income,Revenue,0.482,0.471,0.482,0.454,0.01100000000000001,0.0
+Commercial Banking,2025-11-30,FX Fee,Fee / Noninterest Income,Revenue,0.4865,0.471,0.482,0.454,0.015500000000000014,0.004500000000000004
 Commercial Banking,2025-11-30,Loan Balance,Loan Balance,Balance,1683.206,1670.312,1691.244,1583.047,12.894000000000005,-8.038000000000011
 Commercial Banking,2025-11-30,Loan Interest,Net Interest Income,Revenue,5.655,5.542,5.632,5.239,0.11300000000000043,0.023000000000000576
 Commercial Banking,2025-11-30,Merchant Fee,Fee / Noninterest Income,Revenue,1.19,1.187,1.178,1.107,0.0029999999999998916,0.01200000000000001
-Commercial Banking,2025-11-30,Operating Expense,Operating Expense,Expense,3.894,3.754,3.863,3.607,0.14000000000000012,0.03100000000000014
+Commercial Banking,2025-11-30,Operating Expense,Operating Expense,Expense,3.894,3.7645,3.863,3.607,0.12950000000000017,0.03100000000000014
 Commercial Banking,2025-11-30,Treasury Fee,Fee / Noninterest Income,Revenue,2.386,2.319,2.348,2.232,0.06700000000000017,0.038000000000000256
 Commercial Banking,2025-12-31,Deposit Balance,Deposit Balance,Balance,1506.516,1487.95,1494.743,1404.649,18.56600000000003,11.773000000000138
 Commercial Banking,2025-12-31,Deposit Fee,Fee / Noninterest Income,Revenue,0.93,0.916,0.919,0.862,0.014000000000000012,0.01100000000000001
@@ -235,7 +235,7 @@ Commercial Real Estate,2025-06-30,Nonperforming Loan Proxy,Nonperforming Loan Pr
 Commercial Real Estate,2025-06-30,Operating Expense,Operating Expense,Expense,2.168,2.187,2.189,2.07,-0.018999999999999684,-0.020999999999999908
 Commercial Real Estate,2025-06-30,Origination Fee,Fee / Noninterest Income,Revenue,0.801,0.792,0.795,0.749,0.009000000000000008,0.006000000000000005
 Commercial Real Estate,2025-06-30,Other Fee Income,Other Revenue,Revenue,0.163,0.164,0.162,0.153,-0.0010000000000000009,0.0010000000000000009
-Commercial Real Estate,2025-06-30,Prepayment Fee,Fee / Noninterest Income,Revenue,0.227,0.222,0.226,0.211,0.0050000000000000044,0.0010000000000000009
+Commercial Real Estate,2025-06-30,Prepayment Fee,Fee / Noninterest Income,Revenue,0.224,0.222,0.226,0.211,0.0020000000000000018,-0.0020000000000000018
 Commercial Real Estate,2025-07-31,Commercial Mortgage Balance,Commercial Mortgage Balance,Balance,1952.86,1934.86,1935.824,1830.746,18.0,17.03599999999983
 Commercial Real Estate,2025-07-31,Credit Provision,Credit Provision,Credit,0.468,0.466,0.466,0.444,0.0020000000000000018,0.0020000000000000018
 Commercial Real Estate,2025-07-31,Interest Income,Net Interest Income,Revenue,6.523,6.466,6.444,6.17,0.056999999999999496,0.07899999999999974
@@ -256,7 +256,7 @@ Commercial Real Estate,2025-08-31,Other Fee Income,Other Revenue,Revenue,0.165,0
 Commercial Real Estate,2025-08-31,Prepayment Fee,Fee / Noninterest Income,Revenue,0.226,0.224,0.223,0.213,0.0020000000000000018,0.0030000000000000027
 Commercial Real Estate,2025-09-30,Commercial Mortgage Balance,Commercial Mortgage Balance,Balance,1935.627,1920.555,1928.56,1807.058,15.071999999999889,7.067000000000007
 Commercial Real Estate,2025-09-30,Credit Provision,Credit Provision,Credit,0.472,0.458,0.459,0.436,0.013999999999999957,0.012999999999999956
-Commercial Real Estate,2025-09-30,Interest Income,Net Interest Income,Revenue,6.506,6.41,6.372,6.082,0.09600000000000009,0.13400000000000034
+Commercial Real Estate,2025-09-30,Interest Income,Net Interest Income,Revenue,6.506,6.3580000000000005,6.372,6.082,0.1479999999999997,0.13400000000000034
 Commercial Real Estate,2025-09-30,Loan Servicing Fee,Fee / Noninterest Income,Revenue,0.346,0.338,0.34,0.324,0.007999999999999952,0.00599999999999995
 Commercial Real Estate,2025-09-30,Nonperforming Loan Proxy,Nonperforming Loan Proxy,Balance,20.212,20.052,20.125,18.971,0.16000000000000014,0.08699999999999974
 Commercial Real Estate,2025-09-30,Operating Expense,Operating Expense,Expense,2.16,2.165,2.146,2.016,-0.004999999999999893,0.014000000000000234
@@ -277,7 +277,7 @@ Commercial Real Estate,2025-11-30,Credit Provision,Credit Provision,Credit,0.458
 Commercial Real Estate,2025-11-30,Interest Income,Net Interest Income,Revenue,6.348,6.232,6.271,5.926,0.11599999999999966,0.07699999999999996
 Commercial Real Estate,2025-11-30,Loan Servicing Fee,Fee / Noninterest Income,Revenue,0.342,0.335,0.338,0.321,0.007000000000000006,0.0040000000000000036
 Commercial Real Estate,2025-11-30,Nonperforming Loan Proxy,Nonperforming Loan Proxy,Balance,20.074,19.575,19.869,18.811,0.49900000000000233,0.20500000000000185
-Commercial Real Estate,2025-11-30,Operating Expense,Operating Expense,Expense,2.139,2.106,2.139,2.033,0.03299999999999992,0.0
+Commercial Real Estate,2025-11-30,Operating Expense,Operating Expense,Expense,2.139,2.106,2.137,2.033,0.03299999999999992,0.0019999999999997797
 Commercial Real Estate,2025-11-30,Origination Fee,Fee / Noninterest Income,Revenue,0.786,0.761,0.776,0.717,0.025000000000000022,0.010000000000000009
 Commercial Real Estate,2025-11-30,Other Fee Income,Other Revenue,Revenue,0.162,0.158,0.158,0.151,0.0040000000000000036,0.0040000000000000036
 Commercial Real Estate,2025-11-30,Prepayment Fee,Fee / Noninterest Income,Revenue,0.22,0.215,0.218,0.204,0.0050000000000000044,0.0020000000000000018
@@ -305,7 +305,7 @@ Commercial Real Estate,2026-02-28,Interest Income,Net Interest Income,Revenue,6.
 Commercial Real Estate,2026-02-28,Loan Servicing Fee,Fee / Noninterest Income,Revenue,0.352,0.34,0.345,0.322,0.011999999999999955,0.007000000000000006
 Commercial Real Estate,2026-02-28,Nonperforming Loan Proxy,Nonperforming Loan Proxy,Balance,20.335,20.155,20.308,18.98,0.17999999999999972,0.027000000000001023
 Commercial Real Estate,2026-02-28,Operating Expense,Operating Expense,Expense,2.217,2.143,2.158,2.04,0.07400000000000029,0.05900000000000016
-Commercial Real Estate,2026-02-28,Origination Fee,Fee / Noninterest Income,Revenue,0.797,0.784,0.788,0.742,0.013000000000000012,0.009000000000000008
+Commercial Real Estate,2026-02-28,Origination Fee,Fee / Noninterest Income,Revenue,0.797,0.784,0.788,0.7375,0.013000000000000012,0.009000000000000008
 Commercial Real Estate,2026-02-28,Other Fee Income,Other Revenue,Revenue,0.165,0.162,0.162,0.153,0.0030000000000000027,0.0030000000000000027
 Commercial Real Estate,2026-02-28,Prepayment Fee,Fee / Noninterest Income,Revenue,0.226,0.219,0.221,0.207,0.007000000000000006,0.0050000000000000044
 Commercial Real Estate,2026-03-31,Commercial Mortgage Balance,Commercial Mortgage Balance,Balance,2023.794,1993.793,1981.19,1851.536,30.001000000000204,42.60400000000004

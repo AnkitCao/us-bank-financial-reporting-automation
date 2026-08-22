@@ -29,7 +29,7 @@ Capital Markets,2025-05-31,Actual,Structuring Fee,0.758
 Capital Markets,2025-05-31,Actual,Syndication Fee,0.63
 Capital Markets,2025-05-31,Actual,Trading Revenue,1.957
 Capital Markets,2025-05-31,Actual,Underwriting Revenue,2.595
-Capital Markets,2025-05-31,Budget,Advisory Fee,2.219
+Capital Markets,2025-05-31,Budget,Advisory Fee,2.1515
 Capital Markets,2025-05-31,Budget,Operating Expense,3.54
 Capital Markets,2025-05-31,Budget,Structuring Fee,0.753
 Capital Markets,2025-05-31,Budget,Syndication Fee,0.638
@@ -123,7 +123,7 @@ Capital Markets,2025-09-30,Actual,Advisory Fee,1.988
 Capital Markets,2025-09-30,Actual,Operating Expense,3.175
 Capital Markets,2025-09-30,Actual,Structuring Fee,0.685
 Capital Markets,2025-09-30,Actual,Syndication Fee,0.576
-Capital Markets,2025-09-30,Actual,Trading Revenue,1.751
+Capital Markets,2025-09-30,Actual,Trading Revenue,1.786
 Capital Markets,2025-09-30,Actual,Underwriting Revenue,2.311
 Capital Markets,2025-09-30,Budget,Advisory Fee,1.964
 Capital Markets,2025-09-30,Budget,Operating Expense,3.141
@@ -166,7 +166,7 @@ Capital Markets,2025-10-31,Prior Year,Operating Expense,3.157
 Capital Markets,2025-10-31,Prior Year,Structuring Fee,0.691
 Capital Markets,2025-10-31,Prior Year,Syndication Fee,0.576
 Capital Markets,2025-10-31,Prior Year,Trading Revenue,1.753
-Capital Markets,2025-10-31,Prior Year,Underwriting Revenue,2.316
+Capital Markets,2025-10-31,Prior Year,Underwriting Revenue,2.3310000000000004
 Capital Markets,2025-11-30,Actual,Advisory Fee,2.252
 Capital Markets,2025-11-30,Actual,Operating Expense,3.592
 Capital Markets,2025-11-30,Actual,Structuring Fee,0.772
@@ -204,7 +204,7 @@ Capital Markets,2025-12-31,Budget,Syndication Fee,0.643
 Capital Markets,2025-12-31,Budget,Trading Revenue,1.977
 Capital Markets,2025-12-31,Budget,Underwriting Revenue,2.631
 Capital Markets,2025-12-31,Forecast,Advisory Fee,2.266
-Capital Markets,2025-12-31,Forecast,Operating Expense,3.612
+Capital Markets,2025-12-31,Forecast,Operating Expense,3.5460000000000003
 Capital Markets,2025-12-31,Forecast,Structuring Fee,0.782
 Capital Markets,2025-12-31,Forecast,Syndication Fee,0.649
 Capital Markets,2025-12-31,Forecast,Trading Revenue,2.011
@@ -404,7 +404,7 @@ Commercial Banking,2025-05-31,Budget,Deposit Fee,0.935
 Commercial Banking,2025-05-31,Budget,FX Fee,0.49
 Commercial Banking,2025-05-31,Budget,Loan Balance,1672.537
 Commercial Banking,2025-05-31,Budget,Loan Interest,5.709
-Commercial Banking,2025-05-31,Budget,Merchant Fee,1.193
+Commercial Banking,2025-05-31,Budget,Merchant Fee,1.185
 Commercial Banking,2025-05-31,Budget,Operating Expense,3.817
 Commercial Banking,2025-05-31,Budget,Treasury Fee,2.399
 Commercial Banking,2025-05-31,Forecast,Deposit Balance,1534.423
@@ -444,7 +444,7 @@ Commercial Banking,2025-06-30,Forecast,Deposit Fee,0.969
 Commercial Banking,2025-06-30,Forecast,FX Fee,0.494
 Commercial Banking,2025-06-30,Forecast,Loan Balance,1700.946
 Commercial Banking,2025-06-30,Forecast,Loan Interest,5.75
-Commercial Banking,2025-06-30,Forecast,Merchant Fee,1.225
+Commercial Banking,2025-06-30,Forecast,Merchant Fee,1.219
 Commercial Banking,2025-06-30,Forecast,Operating Expense,3.991
 Commercial Banking,2025-06-30,Forecast,Treasury Fee,2.448
 Commercial Banking,2025-06-30,Prior Year,Deposit Balance,1453.542
@@ -462,7 +462,7 @@ Commercial Banking,2025-07-31,Actual,Loan Balance,1726.461
 Commercial Banking,2025-07-31,Actual,Loan Interest,5.778
 Commercial Banking,2025-07-31,Actual,Merchant Fee,1.235
 Commercial Banking,2025-07-31,Actual,Operating Expense,3.978
-Commercial Banking,2025-07-31,Actual,Treasury Fee,2.436
+Commercial Banking,2025-07-31,Actual,Treasury Fee,2.441
 Commercial Banking,2025-07-31,Budget,Deposit Balance,1521.924
 Commercial Banking,2025-07-31,Budget,Deposit Fee,0.949
 Commercial Banking,2025-07-31,Budget,FX Fee,0.493
@@ -484,7 +484,7 @@ Commercial Banking,2025-07-31,Prior Year,Deposit Fee,0.902
 Commercial Banking,2025-07-31,Prior Year,FX Fee,0.465
 Commercial Banking,2025-07-31,Prior Year,Loan Balance,1609.997
 Commercial Banking,2025-07-31,Prior Year,Loan Interest,5.454
-Commercial Banking,2025-07-31,Prior Year,Merchant Fee,1.15
+Commercial Banking,2025-07-31,Prior Year,Merchant Fee,1.1520000000000001
 Commercial Banking,2025-07-31,Prior Year,Operating Expense,3.76
 Commercial Banking,2025-07-31,Prior Year,Treasury Fee,2.291
 Commercial Banking,2025-08-31,Actual,Deposit Balance,1528.162
@@ -505,7 +505,7 @@ Commercial Banking,2025-08-31,Budget,Operating Expense,3.834
 Commercial Banking,2025-08-31,Budget,Treasury Fee,2.394
 Commercial Banking,2025-08-31,Forecast,Deposit Balance,1533.184
 Commercial Banking,2025-08-31,Forecast,Deposit Fee,0.944
-Commercial Banking,2025-08-31,Forecast,FX Fee,0.488
+Commercial Banking,2025-08-31,Forecast,FX Fee,0.494
 Commercial Banking,2025-08-31,Forecast,Loan Balance,1725.732
 Commercial Banking,2025-08-31,Forecast,Loan Interest,5.733
 Commercial Banking,2025-08-31,Forecast,Merchant Fee,1.21
@@ -518,7 +518,7 @@ Commercial Banking,2025-08-31,Prior Year,Loan Balance,1641.865
 Commercial Banking,2025-08-31,Prior Year,Loan Interest,5.449
 Commercial Banking,2025-08-31,Prior Year,Merchant Fee,1.145
 Commercial Banking,2025-08-31,Prior Year,Operating Expense,3.755
-Commercial Banking,2025-08-31,Prior Year,Treasury Fee,2.261
+Commercial Banking,2025-08-31,Prior Year,Treasury Fee,2.2805
 Commercial Banking,2025-09-30,Actual,Deposit Balance,1523.804
 Commercial Banking,2025-09-30,Actual,Deposit Fee,0.934
 Commercial Banking,2025-09-30,Actual,FX Fee,0.489
@@ -536,7 +536,7 @@ Commercial Banking,2025-09-30,Budget,Merchant Fee,1.202
 Commercial Banking,2025-09-30,Budget,Operating Expense,3.804
 Commercial Banking,2025-09-30,Budget,Treasury Fee,2.393
 Commercial Banking,2025-09-30,Forecast,Deposit Balance,1514.375
-Commercial Banking,2025-09-30,Forecast,Deposit Fee,0.94
+Commercial Banking,2025-09-30,Forecast,Deposit Fee,0.935
 Commercial Banking,2025-09-30,Forecast,FX Fee,0.491
 Commercial Banking,2025-09-30,Forecast,Loan Balance,1687.488
 Commercial Banking,2025-09-30,Forecast,Loan Interest,5.743
@@ -545,7 +545,7 @@ Commercial Banking,2025-09-30,Forecast,Operating Expense,3.864
 Commercial Banking,2025-09-30,Forecast,Treasury Fee,2.388
 Commercial Banking,2025-09-30,Prior Year,Deposit Balance,1413.82
 Commercial Banking,2025-09-30,Prior Year,Deposit Fee,0.881
-Commercial Banking,2025-09-30,Prior Year,FX Fee,0.458
+Commercial Banking,2025-09-30,Prior Year,FX Fee,0.4575
 Commercial Banking,2025-09-30,Prior Year,Loan Balance,1590.791
 Commercial Banking,2025-09-30,Prior Year,Loan Interest,5.374
 Commercial Banking,2025-09-30,Prior Year,Merchant Fee,1.14
@@ -557,14 +557,14 @@ Commercial Banking,2025-10-31,Actual,FX Fee,0.49
 Commercial Banking,2025-10-31,Actual,Loan Balance,1710.719
 Commercial Banking,2025-10-31,Actual,Loan Interest,5.666
 Commercial Banking,2025-10-31,Actual,Merchant Fee,1.2
-Commercial Banking,2025-10-31,Actual,Operating Expense,3.877
+Commercial Banking,2025-10-31,Actual,Operating Expense,3.933
 Commercial Banking,2025-10-31,Actual,Treasury Fee,2.38
 Commercial Banking,2025-10-31,Budget,Deposit Balance,1509.126
 Commercial Banking,2025-10-31,Budget,Deposit Fee,0.919
 Commercial Banking,2025-10-31,Budget,FX Fee,0.477
 Commercial Banking,2025-10-31,Budget,Loan Balance,1667.565
 Commercial Banking,2025-10-31,Budget,Loan Interest,5.579
-Commercial Banking,2025-10-31,Budget,Merchant Fee,1.169
+Commercial Banking,2025-10-31,Budget,Merchant Fee,1.1945000000000001
 Commercial Banking,2025-10-31,Budget,Operating Expense,3.772
 Commercial Banking,2025-10-31,Budget,Treasury Fee,2.332
 Commercial Banking,2025-10-31,Forecast,Deposit Balance,1506.525
@@ -585,7 +585,7 @@ Commercial Banking,2025-10-31,Prior Year,Operating Expense,3.688
 Commercial Banking,2025-10-31,Prior Year,Treasury Fee,2.246
 Commercial Banking,2025-11-30,Actual,Deposit Balance,1520.457
 Commercial Banking,2025-11-30,Actual,Deposit Fee,0.925
-Commercial Banking,2025-11-30,Actual,FX Fee,0.482
+Commercial Banking,2025-11-30,Actual,FX Fee,0.4865
 Commercial Banking,2025-11-30,Actual,Loan Balance,1683.206
 Commercial Banking,2025-11-30,Actual,Loan Interest,5.655
 Commercial Banking,2025-11-30,Actual,Merchant Fee,1.19
@@ -597,7 +597,7 @@ Commercial Banking,2025-11-30,Budget,FX Fee,0.471
 Commercial Banking,2025-11-30,Budget,Loan Balance,1670.312
 Commercial Banking,2025-11-30,Budget,Loan Interest,5.542
 Commercial Banking,2025-11-30,Budget,Merchant Fee,1.187
-Commercial Banking,2025-11-30,Budget,Operating Expense,3.754
+Commercial Banking,2025-11-30,Budget,Operating Expense,3.7645
 Commercial Banking,2025-11-30,Budget,Treasury Fee,2.319
 Commercial Banking,2025-11-30,Forecast,Deposit Balance,1475.481
 Commercial Banking,2025-11-30,Forecast,Deposit Fee,0.922
@@ -919,7 +919,7 @@ Commercial Real Estate,2025-06-30,Actual,Nonperforming Loan Proxy,20.57
 Commercial Real Estate,2025-06-30,Actual,Operating Expense,2.168
 Commercial Real Estate,2025-06-30,Actual,Origination Fee,0.801
 Commercial Real Estate,2025-06-30,Actual,Other Fee Income,0.163
-Commercial Real Estate,2025-06-30,Actual,Prepayment Fee,0.227
+Commercial Real Estate,2025-06-30,Actual,Prepayment Fee,0.224
 Commercial Real Estate,2025-06-30,Budget,Commercial Mortgage Balance,1937.673
 Commercial Real Estate,2025-06-30,Budget,Credit Provision,0.47
 Commercial Real Estate,2025-06-30,Budget,Interest Income,6.472
@@ -1030,7 +1030,7 @@ Commercial Real Estate,2025-09-30,Actual,Other Fee Income,0.162
 Commercial Real Estate,2025-09-30,Actual,Prepayment Fee,0.221
 Commercial Real Estate,2025-09-30,Budget,Commercial Mortgage Balance,1920.555
 Commercial Real Estate,2025-09-30,Budget,Credit Provision,0.458
-Commercial Real Estate,2025-09-30,Budget,Interest Income,6.41
+Commercial Real Estate,2025-09-30,Budget,Interest Income,6.3580000000000005
 Commercial Real Estate,2025-09-30,Budget,Loan Servicing Fee,0.338
 Commercial Real Estate,2025-09-30,Budget,Nonperforming Loan Proxy,20.052
 Commercial Real Estate,2025-09-30,Budget,Operating Expense,2.165
@@ -1114,7 +1114,7 @@ Commercial Real Estate,2025-11-30,Forecast,Credit Provision,0.452
 Commercial Real Estate,2025-11-30,Forecast,Interest Income,6.271
 Commercial Real Estate,2025-11-30,Forecast,Loan Servicing Fee,0.338
 Commercial Real Estate,2025-11-30,Forecast,Nonperforming Loan Proxy,19.869
-Commercial Real Estate,2025-11-30,Forecast,Operating Expense,2.139
+Commercial Real Estate,2025-11-30,Forecast,Operating Expense,2.137
 Commercial Real Estate,2025-11-30,Forecast,Origination Fee,0.776
 Commercial Real Estate,2025-11-30,Forecast,Other Fee Income,0.158
 Commercial Real Estate,2025-11-30,Forecast,Prepayment Fee,0.218
@@ -1232,7 +1232,7 @@ Commercial Real Estate,2026-02-28,Prior Year,Interest Income,6.041
 Commercial Real Estate,2026-02-28,Prior Year,Loan Servicing Fee,0.322
 Commercial Real Estate,2026-02-28,Prior Year,Nonperforming Loan Proxy,18.98
 Commercial Real Estate,2026-02-28,Prior Year,Operating Expense,2.04
-Commercial Real Estate,2026-02-28,Prior Year,Origination Fee,0.742
+Commercial Real Estate,2026-02-28,Prior Year,Origination Fee,0.7375
 Commercial Real Estate,2026-02-28,Prior Year,Other Fee Income,0.153
 Commercial Real Estate,2026-02-28,Prior Year,Prepayment Fee,0.207
 Commercial Real Estate,2026-03-31,Actual,Commercial Mortgage Balance,2023.794

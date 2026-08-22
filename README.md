@@ -34,7 +34,7 @@ src/calculate_kpis.py → src/detect_exceptions.py
       ▼
 data/processed/*.csv
       ▼
-app/app.py → Monthly LOB Financial Review
+app/App.py → Monthly LOB Financial Review
 ```
 
 ## Quick start
@@ -42,7 +42,7 @@ app/app.py → Monthly LOB Financial Review
 ```bash
 cd "/Users/ankit/Downloads/US Bank Financial Reporting Automation"
 python -m src.pipeline
-streamlit run app/app.py
+streamlit run app/App.py
 ```
 
 Open the local URL printed by Streamlit. The default review month is June 2026.
@@ -100,4 +100,3 @@ See `docs/scenario_design.md` for the fact/inference/assumption boundary.
 ## Narrative-control design
 
 `src/executive_summary.py` generates the default briefing from validated outputs. It does not recalculate KPIs or inspect raw data. A production LLM can replace the wording layer later, but it should receive only reviewed KPI, variance and alert records.
-

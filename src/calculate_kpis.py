@@ -25,9 +25,35 @@ def build_monthly_kpis(mapped: pd.DataFrame) -> pd.DataFrame:
     grouped = grouped.rename(columns={"Revenue": "revenue", "Expense": "operating_expense", "Credit": "credit_provision"})
     grouped["pre_provision_profit"] = grouped["revenue"] - grouped["operating_expense"]
     grouped["adjusted_profit"] = grouped["pre_provision_profit"] - grouped["credit_provision"]
+    grouped["cost_to_income_ratio"] = _safe_divide(grouped["operating_expense"], grouped["revenue"])
     grouped["profit_margin"] = _safe_divide(grouped["adjusted_profit"], grouped["revenue"])
 
-    value_columns = ["revenue", "operating_expense", "credit_provision", "adjusted_profit", "profit_margin"]
+    source_values = (
+        mapped.pivot_table(
+            index=["business_unit", "period", "scenario"],
+            columns="source_metric",
+            values="amount_millions",
+            aggfunc="sum",
+        )
+        .reset_index()
+    )
+    grouped = grouped.merge(source_values, on=["business_unit", "period", "scenario"], how="left", validate="one_to_one")
+    grouped["loan_to_deposit_ratio"] = _safe_divide(grouped.get("Loan Balance"), grouped.get("Deposit Balance"))
+    grouped["npl_ratio"] = _safe_divide(grouped.get("Nonperforming Loan Proxy"), grouped.get("Commercial Mortgage Balance"))
+    capital_markets_mix = {
+        "advisory_mix": "Advisory Fee",
+        "underwriting_mix": "Underwriting Revenue",
+        "trading_mix": "Trading Revenue",
+        "structuring_mix": "Structuring Fee",
+        "syndication_mix": "Syndication Fee",
+    }
+    for output_column, source_metric in capital_markets_mix.items():
+        grouped[output_column] = _safe_divide(grouped.get(source_metric), grouped["revenue"])
+
+    value_columns = [
+        "revenue", "operating_expense", "credit_provision", "adjusted_profit", "cost_to_income_ratio", "profit_margin",
+        "loan_to_deposit_ratio", "npl_ratio", *capital_markets_mix,
+    ]
     wide = grouped.pivot(index=["business_unit", "period"], columns="scenario", values=value_columns)
     wide.columns = [f"{metric}_{scenario.lower().replace(' ', '_')}" for metric, scenario in wide.columns]
     wide = wide.reset_index()
@@ -57,4 +83,3 @@ def build_metric_detail(mapped: pd.DataFrame) -> pd.DataFrame:
     detail["variance_to_budget"] = detail["actual"] - detail["budget"]
     detail["variance_to_forecast"] = detail["actual"] - detail["forecast"]
     return detail
-
