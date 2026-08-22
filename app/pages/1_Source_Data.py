@@ -280,6 +280,7 @@ st.set_page_config(page_title="Source Data for Three Businesses", page_icon="ðŸ“
 st.markdown(
     """
     <style>
+      html { zoom:50%; }
       html, body, .stApp, .stApp * { font-family:"Times New Roman", Times, serif !important; }
       .stApp { background:#F7F8FC; }
       .block-container { width:calc(100% - 4rem); max-width:none; padding-top:2.5rem; padding-bottom:4rem; }

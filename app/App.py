@@ -177,6 +177,13 @@ def normalize_llm_sentence(text: str) -> str:
     return normalized
 
 
+def normalize_insight_label(text: str) -> str:
+    """Keep insight headings short and visually consistent."""
+    label = " ".join(str(text).replace(":", "").split())
+    label = re.sub(r"\band\b", "&", label, flags=re.IGNORECASE)
+    return label[:1].upper() + label[1:] if label else ""
+
+
 def fmt_money(value: float) -> str:
     """Format a USD millions value for executive display."""
     return f"${value:,.1f}M"
@@ -268,20 +275,25 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "loan-to-deposit, fee concentration, and alert persistence. Return JSON only with: "
                 '{"executive_summary":"exactly two short factual sentences","business_reviews":['
                 '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive",'
-                '"label":"2-5 word finding","message":"one concise factual sentence"}]}. '
+                '"label":"decision-oriented headline of no more than six words","message":"one or two concise factual sentences"}]}. '
                 "Select the two most decision-relevant period findings for the executive summary. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. Preserve all "
                 "numbers and periods exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
                 "Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric name and value appear together, use Metric "
-                "Name (value), using natural adjective-first names such as Actual Revenue ($11.255M), Budget Revenue ($9.485M), Actual "
-                "Operating Expense ($3.968M), and Budget Operating Expense ($3.674M). Never write Revenue actual or Expense actual. The finding "
-                "label and message will be displayed as Label: Message, so do not include bullets, middle dots, dashes, or a second label in the "
-                "message. Translate technical field names into natural finance language: revenue_actual becomes Actual Revenue, "
+                "Name (value), using natural adjective-first names such as Actual Revenue ($11.3M), Budget Revenue ($9.5M), Actual "
+                "Operating Expense ($4.0M), and Budget Operating Expense ($3.7M). Never write Revenue actual or Expense actual. Create a short, "
+                "decision-oriented label and use & instead of the word and inside that label. Do not put a colon, bullet, middle dot, dash, or a "
+                "second label in either returned field; the interface adds one aligned colon between the label and message. State the result first, "
+                "then the comparison. When Actual and Budget are available, calculate and state the variance, using natural language such as "
+                "Revenue reached $11.3M, exceeding budget by $1.8M. Use above budget, below budget, or in line with budget consistently. Avoid "
+                "repeating Actual Revenue and Budget Revenue when Revenue and the variance say the same thing. Translate technical field names "
+                "into natural finance language: revenue_actual becomes Actual Revenue, "
                 "adjusted_profit_actual becomes Actual Adjusted Profit, operating_expense_actual becomes Actual Operating Expense, and "
                 "credit_provision_actual becomes Actual Credit Provision. Do not expose snake_case field names or mechanically list fields. "
-                "Synthesize the figures into a fluent, decision-relevant business statement. Format every displayed number to exactly one "
-                "decimal place, including money, percentages, ratios, and variances. Write complete sentences ending with periods. Do not use "
-                "em dashes or en dashes to append explanations."
+                "Synthesize the figures into fluent executive language. Preserve every source fact, but never invent causes, thresholds, values, "
+                "or recommendations. Format every displayed number to exactly one decimal place, including money, percentages, ratios, and "
+                "variances. Keep each review near 30 words when possible. Write complete sentences ending with periods. Do not use em dashes or "
+                "en dashes."
             ),
             input=json.dumps(sanitize_llm_evidence(facts), default=str),
             store=False,
@@ -295,7 +307,7 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
             status = str(item.get("status", ""))
             if unit not in allowed_units or unit in seen or status not in {"Critical", "Caution", "Positive"}:
                 continue
-            label = " ".join(str(item.get("label", "")).split())
+            label = normalize_insight_label(str(item.get("label", "")))
             message = normalize_llm_sentence(str(item.get("message", "")))
             if "forecast" in label.lower():
                 continue
@@ -708,6 +720,7 @@ st.set_page_config(page_title="Automated Three-Business Performance Dashboard", 
 st.markdown(
     """
     <style>
+      html { zoom:50%; }
       html, body, .stApp, .stApp * { font-family:"Times New Roman", Times, serif !important; box-sizing:border-box; }
       html, body, .stApp { background:#F5F7FA; max-width:100%; overflow-x:hidden; }
       .block-container { width:calc(100% - 4rem); max-width:100%; padding-top:2.5rem; padding-bottom:4rem; overflow-x:hidden; }
@@ -748,10 +761,12 @@ st.markdown(
       .alert-group { display:grid; grid-template-columns:300px 1fr; min-height:92px; background:white; border:1px solid #DCE2F3; border-radius:11px; margin-bottom:12px; overflow:hidden; }
       .alert-business { display:flex; align-items:center; justify-content:center; min-height:92px; padding:16px 20px; color:#001E79; background:#F1F4FA; text-align:center; font-size:1.5rem; font-weight:800; line-height:1.25; }
       .alert-list { display:flex; flex-direction:column; min-width:0; min-height:92px; }
-      .alert { display:flex; align-items:center; flex:1; border:0; border-bottom:1px solid #DCE2F3; border-radius:0; padding:16px 22px; margin:0; font-size:1.4rem; line-height:1.35; }
+      .alert { display:grid; grid-template-columns:190px 22px minmax(0,1fr); align-items:center; flex:1; border:0; border-bottom:1px solid #DCE2F3; border-radius:0; padding:16px 22px; margin:0; font-size:1.4rem; line-height:1.35; }
       .alert:last-child { border-bottom:0; }
       .alert-red { border-left:7px solid #FF3B30; } .alert-yellow { border-left:7px solid #F4B400; } .alert-green { border-left:7px solid #2563EB; }
-      .alert-rule { color:#001E79; font-weight:800; }
+      .alert-rule { color:#001E79; font-weight:800; line-height:1.25; }
+      .alert-colon { color:#334155; font-weight:700; text-align:center; }
+      .alert-message { min-width:0; color:#17253A; }
       .score-wrap { overflow-x:auto; background:white; border-radius:10px; border:1px solid #DCE2F3; }
       .scorecard { width:100%; min-width:1200px; border-collapse:collapse; margin:0 !important; font-size:1.45rem; }
       .scorecard th { background:#001E79; color:white; border:2px solid white; padding:16px; text-align:center; font-size:1.5rem; }
@@ -947,7 +962,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 4,
+    "version": 5,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "raw_source_records": raw_period_evidence,
@@ -992,7 +1007,8 @@ for business_unit in selected_units:
     review = review_by_unit[business_unit]
     alert_rows = [
         f"<div class='alert alert-{status_css[review['status']]}'><span class='alert-rule'>"
-        f"{escape(review['label'])}</span>: {escape(review['message'])}</div>"
+        f"{escape(normalize_insight_label(review['label']))}</span><span class='alert-colon'>:</span>"
+        f"<span class='alert-message'>{escape(review['message'])}</span></div>"
     ]
     st.markdown(
         f"<div class='alert-group'><div class='alert-business'>{escape(str(business_unit))}</div>"
