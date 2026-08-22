@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import sys
 import textwrap
 from html import escape
@@ -114,6 +115,68 @@ def dataframe_records(frame: pd.DataFrame) -> list[dict]:
     return prepared.where(pd.notna(prepared), None).to_dict("records")
 
 
+def sanitize_llm_evidence(value):
+    """Remove every forecast field and forecast record before an LLM call."""
+    if isinstance(value, list):
+        cleaned = []
+        for item in value:
+            if isinstance(item, dict):
+                scenario = next(
+                    (
+                        item.get(key)
+                        for key in ("scenario", "Plan Type", "Plan Case", "Plan Scenario")
+                        if key in item
+                    ),
+                    None,
+                )
+                if str(scenario).strip().lower() == "forecast":
+                    continue
+                narrative_values = [
+                    item.get(key) for key in ("message", "rule", "metric", "label") if key in item
+                ]
+                if any("forecast" in str(text).lower() for text in narrative_values):
+                    continue
+            sanitized_item = sanitize_llm_evidence(item)
+            if sanitized_item is not None:
+                cleaned.append(sanitized_item)
+        return cleaned
+    if isinstance(value, dict):
+        return {
+            key: sanitize_llm_evidence(item)
+            for key, item in value.items()
+            if "forecast" not in str(key).lower()
+        }
+    if isinstance(value, str) and "forecast" in value.lower():
+        return None
+    return value
+
+
+def normalize_llm_sentence(text: str) -> str:
+    """Normalize one LLM sentence and reject forbidden forecast language."""
+    normalized = str(text).replace("—", ", ").replace("–", ", ").replace("·", ": ").replace("•", "")
+    field_names = {
+        "revenue_actual": "Actual Revenue",
+        "revenue_budget": "Budget Revenue",
+        "adjusted_profit_actual": "Actual Adjusted Profit",
+        "operating_expense_actual": "Actual Operating Expense",
+        "operating_expense_budget": "Budget Operating Expense",
+        "credit_provision_actual": "Actual Credit Provision",
+        "Revenue actual": "Actual Revenue",
+        "Operating Expense actual": "Actual Operating Expense",
+        "Credit Provision actual": "Actual Credit Provision",
+    }
+    for source_name, display_name in field_names.items():
+        normalized = normalized.replace(source_name, display_name)
+    normalized = re.sub(r"(?<![\w.])-?\d+\.\d{2,}(?!\w)", lambda match: f"{float(match.group()):.1f}", normalized)
+    normalized = " ".join(normalized.split())
+    normalized = re.sub(r"\s+([,:;.])", r"\1", normalized)
+    if "forecast" in normalized.lower():
+        return ""
+    if normalized and normalized[-1] not in ".!?":
+        normalized += "."
+    return normalized
+
+
 def fmt_money(value: float) -> str:
     """Format a USD millions value for executive display."""
     return f"${value:,.1f}M"
@@ -133,22 +196,22 @@ def format_chart_period_range(frame: pd.DataFrame) -> str:
 def local_chart_summary(chart_key: str, values: dict) -> str:
     """Return a concise deterministic summary when an API key is unavailable."""
     if chart_key == "cost_to_income":
-        return f"{values['highest_unit']} recorded the highest {values['period']} ratio at {values['highest']:.1f}%, while {values['lowest_unit']} remained lowest at {values['lowest']:.1f}%."
+        return f"{values['highest_unit']} recorded the highest cost-to-income ratio ({values['highest']:.1f}%) in {values['period']}, while {values['lowest_unit']} recorded the lowest ratio ({values['lowest']:.1f}%)."
     if chart_key == "profit_margin":
-        return f"{values['highest_unit']} led {values['period']} profit margin at {values['highest']:.1f}%, {values['variance']:+.1f} percentage points versus target."
+        return f"{values['highest_unit']} led {values['period']} profit margins ({values['highest']:.1f}%), finishing {values['variance']:+.1f} percentage points versus target."
     if chart_key == "revenue_trend":
-        return f"{values['unit']} recorded {values['latest']:.1f}M in {values['period']}, a {values['change']:+.1f}% change from the prior month."
+        return f"{values['unit']} recorded revenues (${values['latest']:.1f}M) in {values['period']}, a change ({values['change']:+.1f}%) from the prior month."
     if chart_key == "revenue_variance":
-        return f"Revenue finished ${abs(values['variance']):.1f}M {'above' if values['variance'] >= 0 else 'below'} target, led by {values['driver']}."
+        return f"Revenue variance (${abs(values['variance']):.1f}M) finished {'above' if values['variance'] >= 0 else 'below'} target, led by {values['driver']}."
     if chart_key == "expense_variance":
-        return f"{values['unit']} had the largest unfavorable expense variance at ${values['variance']:.1f}M above budget."
+        return f"{values['unit']} had the largest unfavorable expense variance (${values['variance']:.1f}M) above budget."
     if chart_key == "npl_ratio":
         direction = "increased" if values["latest"] > values["prior"] else "decreased"
-        return f"CRE NPL ratio {direction} to {values['latest']:.2f}% and remained below the illustrative 1.50% review threshold."
+        return f"CRE NPL ratio ({values['latest']:.2f}%) {direction} and remained below the illustrative review threshold (1.50%)."
     if chart_key == "loan_to_deposit":
         direction = "increased" if values["latest"] > values["prior"] else "decreased"
-        return f"The ratio {direction} to {values['latest']:.1f}% in {values['period']}, indicating loan growth continued to outpace deposit funding."
-    return f"{values['largest_component']} was the largest {values['period']} Capital Markets fee component at {values['largest_share']:.1f}%."
+        return f"Loan-to-deposit ratio ({values['latest']:.1f}%) {direction} in {values['period']}, indicating loan growth continued to outpace deposit funding."
+    return f"{values['largest_component']} share ({values['largest_share']:.1f}%) was the largest Capital Markets fee component in {values['period']}."
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -169,12 +232,17 @@ def generate_chart_summary(chart_key: str, summary_dict: dict) -> str:
                 "Analyze all supplied records for this chart and choose its most decision-relevant pattern; do not follow a fixed sentence "
                 "template. Compare levels, period changes, target or budget gaps, and business differences where available. Write exactly one "
                 "concise factual CFO sentence. Treat calculated clean metrics as authoritative when raw rows contain deliberate quality issues. "
+                "Never mention, analyze, compare, or output Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric "
+                "name and its value appear together, write Metric Name (value), for example Operating Expense ($3.968M), never Metric Name "
+                "$3.968M. Translate snake_case fields into natural finance language and synthesize the figures rather than mechanically "
+                "listing field names. Format every displayed number to exactly one decimal place. Write a normal complete sentence ending "
+                "with a period. Do not use an em dash or en dash to append an explanation. "
                 "Use only supplied facts; do not recommend actions or describe your process."
             ),
-            input=json.dumps({"chart": chart_key, "filtered_data": summary_dict}, default=str),
+            input=json.dumps(sanitize_llm_evidence({"chart": chart_key, "filtered_data": summary_dict}), default=str),
             store=False,
         )
-        return response.output_text.strip() or fallback
+        return normalize_llm_sentence(response.output_text) or fallback
     except Exception:
         return fallback
 
@@ -203,9 +271,19 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 '"label":"2-5 word finding","message":"one concise factual sentence"}]}. '
                 "Select the two most decision-relevant period findings for the executive summary. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. Preserve all "
-                "numbers and periods exactly; never invent thresholds, causes, or recommendations."
+                "numbers and periods exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
+                "Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric name and value appear together, use Metric "
+                "Name (value), using natural adjective-first names such as Actual Revenue ($11.255M), Budget Revenue ($9.485M), Actual "
+                "Operating Expense ($3.968M), and Budget Operating Expense ($3.674M). Never write Revenue actual or Expense actual. The finding "
+                "label and message will be displayed as Label: Message, so do not include bullets, middle dots, dashes, or a second label in the "
+                "message. Translate technical field names into natural finance language: revenue_actual becomes Actual Revenue, "
+                "adjusted_profit_actual becomes Actual Adjusted Profit, operating_expense_actual becomes Actual Operating Expense, and "
+                "credit_provision_actual becomes Actual Credit Provision. Do not expose snake_case field names or mechanically list fields. "
+                "Synthesize the figures into a fluent, decision-relevant business statement. Format every displayed number to exactly one "
+                "decimal place, including money, percentages, ratios, and variances. Write complete sentences ending with periods. Do not use "
+                "em dashes or en dashes to append explanations."
             ),
-            input=json.dumps(facts, default=str),
+            input=json.dumps(sanitize_llm_evidence(facts), default=str),
             store=False,
         )
         parsed = json.loads(response.output_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip())
@@ -218,11 +296,13 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
             if unit not in allowed_units or unit in seen or status not in {"Critical", "Caution", "Positive"}:
                 continue
             label = " ".join(str(item.get("label", "")).split())
-            message = " ".join(str(item.get("message", "")).split())
+            message = normalize_llm_sentence(str(item.get("message", "")))
+            if "forecast" in label.lower():
+                continue
             if label and message:
                 reviews.append({"business_unit": unit, "status": status, "label": label, "message": message})
                 seen.add(unit)
-        summary = " ".join(str(parsed.get("executive_summary", "")).split())
+        summary = normalize_llm_sentence(str(parsed.get("executive_summary", "")))
         if not summary or seen != allowed_units:
             return fallback
         return {"executive_summary": summary, "business_reviews": reviews}
@@ -867,7 +947,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 2,
+    "version": 4,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "raw_source_records": raw_period_evidence,
@@ -912,7 +992,7 @@ for business_unit in selected_units:
     review = review_by_unit[business_unit]
     alert_rows = [
         f"<div class='alert alert-{status_css[review['status']]}'><span class='alert-rule'>"
-        f"{escape(review['label'])}</span> · {escape(review['message'])}</div>"
+        f"{escape(review['label'])}</span>: {escape(review['message'])}</div>"
     ]
     st.markdown(
         f"<div class='alert-group'><div class='alert-business'>{escape(str(business_unit))}</div>"

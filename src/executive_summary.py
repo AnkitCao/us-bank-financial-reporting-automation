@@ -21,8 +21,8 @@ def generate_executive_summary(kpis: pd.DataFrame, alerts: pd.DataFrame, period_
     strongest = current.sort_values("revenue_vs_budget", ascending=False).iloc[0]
     weakest_margin = current.sort_values("profit_margin_actual").iloc[0]
     summary = (
-        f"For {display_period}, {strongest['business_unit']} led performance at {strongest['revenue_vs_budget']:+.1%} versus target. "
-        f"{weakest_margin['business_unit']} reported the lowest profit margin at {weakest_margin['profit_margin_actual']:.1%}."
+        f"For {display_period}, {strongest['business_unit']} led revenue performance ({strongest['revenue_vs_budget']:+.1%}) versus target. "
+        f"{weakest_margin['business_unit']} reported the lowest profit margin ({weakest_margin['profit_margin_actual']:.1%})."
     )
     priority = {"Red": 0, "Yellow": 1, "Green": 2}
     if alerts.empty:
