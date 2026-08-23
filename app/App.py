@@ -347,17 +347,51 @@ def overall_performance_sentence(overall: dict) -> str:
 
 
 def department_performance_sentence(row: pd.Series) -> str:
-    """Create a concise, department-specific fallback rather than repeating one template."""
+    """Select the two most material available facts for a non-LLM fallback."""
     unit = str(row["business_unit"])
-    if unit == "Capital Markets":
-        direction = "above target" if row["adjusted_profit_vs_budget"] >= 0 else "below target"
-        return f"Capital Markets delivered {fmt_money(row['adjusted_profit_actual'])} in adjusted profit, {abs(row['adjusted_profit_vs_budget']):.1%} {direction}."
-    if unit == "Commercial Banking" and pd.notna(row.get("loan_to_deposit_ratio_actual")):
-        return f"Commercial Banking's loan-to-deposit ratio was {row['loan_to_deposit_ratio_actual']:.1%}, while revenue reached {fmt_money(row['revenue_actual'])}."
-    if unit == "Commercial Real Estate" and pd.notna(row.get("npl_ratio_actual")):
-        return f"Commercial Real Estate's NPL ratio was {row['npl_ratio_actual']:.1%}, with a {row['profit_margin_actual']:.1%} profit margin."
-    direction = "above target" if row["revenue_vs_budget"] >= 0 else "below target"
-    return f"{unit} generated {fmt_money(row['revenue_actual'])}, {abs(row['revenue_vs_budget']):.1%} {direction}."
+    candidates: list[tuple[float, str, str]] = []
+
+    def add(metric: str, score: float, text: str) -> None:
+        if pd.notna(score):
+            candidates.append((float(score), metric, text))
+
+    revenue_gap = float(row["revenue_vs_budget"])
+    add("revenue", abs(revenue_gap), (
+        f"revenue reached {fmt_money(row['revenue_actual'])}, {abs(revenue_gap):.1%} "
+        f"{'above' if revenue_gap >= 0 else 'below'} target"
+    ))
+    expense_gap = float(row["operating_expense_vs_budget"])
+    add("expense", abs(expense_gap) * (1.35 if expense_gap > 0 else 0.85), (
+        f"expenses were {fmt_money(row['operating_expense_actual'])}, {abs(expense_gap):.1%} "
+        f"{'above' if expense_gap >= 0 else 'below'} budget"
+    ))
+    profit_gap = float(row["adjusted_profit_vs_budget"])
+    add("profit", abs(profit_gap) * 1.1, (
+        f"adjusted profit was {fmt_money(row['adjusted_profit_actual'])}, {abs(profit_gap):.1%} "
+        f"{'above' if profit_gap >= 0 else 'below'} target"
+    ))
+    margin_gap = float(row["profit_margin_actual"] - row["profit_margin_budget"])
+    add("margin", abs(margin_gap) * 1.15, (
+        f"profit margin was {row['profit_margin_actual']:.1%}, {'above' if margin_gap >= 0 else 'below'} "
+        f"the {row['profit_margin_budget']:.1%} target"
+    ))
+    if pd.notna(row.get("loan_to_deposit_ratio_actual")) and pd.notna(row.get("loan_to_deposit_ratio_budget")):
+        gap = float(row["loan_to_deposit_ratio_actual"] - row["loan_to_deposit_ratio_budget"])
+        add("loan_to_deposit", abs(gap) * 1.25, (
+            f"the loan-to-deposit ratio was {row['loan_to_deposit_ratio_actual']:.1%}, "
+            f"{'above' if gap >= 0 else 'below'} the {row['loan_to_deposit_ratio_budget']:.1%} target"
+        ))
+    if pd.notna(row.get("npl_ratio_actual")) and pd.notna(row.get("npl_ratio_budget")):
+        gap = float(row["npl_ratio_actual"] - row["npl_ratio_budget"])
+        add("npl", abs(gap) * (1.6 if gap > 0 else 1.1), (
+            f"the NPL ratio was {row['npl_ratio_actual']:.1%}, "
+            f"{'above' if gap >= 0 else 'below'} the {row['npl_ratio_budget']:.1%} target"
+        ))
+
+    selected = sorted(candidates, key=lambda item: item[0], reverse=True)[:2]
+    if len(selected) == 1:
+        return f"{unit} {selected[0][2]}."
+    return f"{unit} {selected[0][2]}; {selected[1][2]}."
 
 
 def format_chart_period_range(frame: pd.DataFrame) -> str:
@@ -481,11 +515,15 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "without these four figures. After the Overall sentence, write exactly one separate sentence for each supplied business unit, in "
                 "the supplied order. For each department, evaluate every metric and every change inside the selected reporting period, including "
                 "revenue, expense, profit, margin, cost-to-income, loans, deposits, NPL, fee mix, target or budget variance, and time trend. Independently "
-                "choose the one or two findings that are most material and worthy of executive attention; do not default to revenue or expense. Combine "
+                "rank the evidence by decision relevance, then choose exactly two distinct findings that are most material and worthy of executive "
+                "attention. Materiality means an unfavorable breach, a large target or budget gap, a meaningful period reversal, a risk or funding "
+                "signal, or an unusually strong result. Do not default to revenue and expense, and do not choose a metric merely because it appears "
+                "first in the input. Combine "
                 "those findings into one complete sentence that starts with the business-unit name, uses only figures supported by the selected-period "
                 "records, contains no more than 32 words and four numeric values, and states a clear comparison, change, high, low, or exception rather "
                 "than merely listing metric names and values. Vary sentence structure naturally across departments; do not force all three lines into "
-                "the same template or discuss the same metric for every department. Write for fluent executive read-aloud, using natural phrases such "
+                "the same template or discuss the same metric for every department. The two facts may use different comparison types and sentence "
+                "structures. Never copy the wording pattern used for another department. Write for fluent executive read-aloud, using natural phrases such "
                 "as revenue, adjusted profit, expenses, loans, and deposits instead of mechanically reproducing source column labels such as Actual "
                 "Revenue or Actual Operating Expense. Shorten Loan Balance to loans and Commercial Mortgage Balance to mortgage portfolio when the "
                 "business-unit context makes the meaning clear. Retain a full metric name only when shortening it would create ambiguity. In narrative "
@@ -496,15 +534,14 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "metrics may use Budget terminology. Avoid repetitive phrases such as Actual Revenue and Target Revenue when revenue and its "
                 "variance communicate the same fact. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
-                "Return one or two insights per business unit. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
+                "Return exactly two insights per business unit, covering two distinct metrics. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
                 "from the supplied data, such as an amount, percentage, ratio, variance, or numeric month count. A calendar year alone does not "
                 "satisfy this requirement. Never return a qualitative conclusion without quantitative evidence. Express percentage differences "
                 "with the % symbol and never use point, points, percentage point, or percentage points. Preserve all numbers and periods "
                 "exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
                 "Forecast. Forecast is forbidden even if it appears in source data. Use only Actual, Target, expense Budget, and Prior Year facts. "
                 "Whenever a metric name and value appear together, use concise natural business language rather than copying database column names. "
-                "Prefer forms such as revenue reached $11.3M, loans exceeded target by $42.3M, the mortgage portfolio reached $2,108.0M, or operating "
-                "expenses exceeded budget by $0.3M. Use lowercase target and budget throughout narrative text. "
+                "Use lowercase target and budget throughout narrative text. "
                 "Do not write labels such as Actual Revenue, Revenue actual, Actual Operating Expense, or Expense actual. Give every insight "
                 "its own short decision-oriented title and independently classify each insight. Use Positive for favorable results, target "
                 "outperformance, or no alert; Critical for clear unfavorable results such as expense overruns, material deterioration, or breached "
@@ -536,17 +573,20 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
             if unit not in allowed_units or unit in seen or status not in {"Critical", "Caution", "Positive"}:
                 continue
             insights = []
+            insight_titles = set()
             for insight in item.get("insights", []):
                 title = normalize_insight_label(str(insight.get("title", "")))
                 message = normalize_llm_sentence(str(insight.get("text", "")))
                 insight_status = str(insight.get("status", status))
                 if (
                     title and message and "forecast" not in title.lower()
+                    and title.lower() not in insight_titles
                     and every_sentence_has_quantitative_evidence(message)
                     and insight_status in {"Critical", "Caution", "Positive"}
                 ):
                     insights.append({"title": title, "text": message, "status": insight_status})
-            if insights:
+                    insight_titles.add(title.lower())
+            if len(insights) >= 2:
                 reviews.append({"business_unit": unit, "status": status, "insights": insights[:2]})
                 seen.add(unit)
         summary = normalize_llm_sentence(str(parsed.get("executive_summary", "")))
@@ -958,9 +998,11 @@ def aggregate_kpis(frame: pd.DataFrame) -> pd.DataFrame:
     result["profit_margin_actual"] = result["adjusted_profit_actual"] / result["revenue_actual"]
     result["profit_margin_budget"] = result["adjusted_profit_budget"] / result["revenue_budget"]
     ending_values = frame.sort_values("period").groupby("business_unit", as_index=False).tail(1).set_index("business_unit")
-    for ratio in ["loan_to_deposit_ratio_actual", "npl_ratio_actual"]:
-        if ratio in ending_values:
-            result[ratio] = result["business_unit"].map(ending_values[ratio])
+    for ratio in ["loan_to_deposit_ratio", "npl_ratio"]:
+        for scenario in ["actual", "budget", "prior_year"]:
+            column = f"{ratio}_{scenario}"
+            if column in ending_values:
+                result[column] = result["business_unit"].map(ending_values[column])
     for mix in ["advisory_mix_actual", "underwriting_mix_actual", "trading_mix_actual", "structuring_mix_actual", "syndication_mix_actual"]:
         if mix in frame:
             weighted = (frame[mix] * frame["revenue_actual"]).groupby(frame["business_unit"]).sum(min_count=1)
@@ -1367,7 +1409,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 11,
+    "version": 12,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
