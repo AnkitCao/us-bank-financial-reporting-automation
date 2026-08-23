@@ -883,15 +883,14 @@ st.markdown(
       .legend-item { display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
       .legend-dot { width:13px; height:13px; border-radius:50%; display:inline-block; }
       .dot-red { background:#FF3B30; } .dot-yellow { background:#F4B400; } .dot-green { background:#2563EB; }
-      .alert-group { display:grid; grid-template-columns:325px 1fr; min-height:96px; background:white; border:1px solid #DCE2F3; border-left:8px solid var(--alert-color); border-radius:11px; margin-bottom:12px; overflow:hidden; }
+      .alert-group { display:grid; grid-template-columns:325px 1fr; column-gap:10px; min-height:96px; background:transparent; border:0; border-left:8px solid var(--alert-color); border-radius:11px 0 0 11px; margin-bottom:12px; overflow:visible; }
       .alert-group-red { --alert-color:#FF3B30; --alert-title:#C62828; }
       .alert-group-yellow { --alert-color:#E5B400; --alert-title:#D99F00; }
       .alert-group-green { --alert-color:#198754; --alert-title:#198754; }
-      .alert-business { display:flex; align-items:center; min-height:96px; padding:18px 22px; color:#001E79; background:#F1F4FA; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
+      .alert-business { display:flex; align-items:center; min-height:96px; padding:18px 22px; color:#001E79; background:#F1F4FA; border:1px solid #DCE2F3; border-left:0; border-radius:0 10px 10px 0; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
       .alert-list { display:flex; flex-direction:column; min-width:0; min-height:96px; }
-      .alert { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:10px; flex:1; border:0; border-bottom:1px solid #DCE2F3; border-radius:0; padding:16px 20px; margin:0; font-size:1.55rem; line-height:1.35; }
-      .alert:last-child { border-bottom:0; }
-      .alert-insight { color:#334155; background:#FAFBFD; border:1px solid #E2E8F0; border-radius:7px; padding:10px 14px; font-weight:400; }
+      .alert { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:10px; flex:1; border:0; padding:0; margin:0; font-size:1.55rem; line-height:1.35; }
+      .alert-insight { color:#334155; background:#FFFFFF; border:1px solid #DCE2F3; border-radius:10px; padding:16px 18px; font-weight:400; }
       .alert-insight-title { color:var(--alert-title); font-weight:800; }
       .alert-insight strong { color:inherit; font-weight:800; }
       .score-wrap { overflow-x:auto; background:white; border-radius:10px; border:1px solid #DCE2F3; }
