@@ -352,6 +352,33 @@ def normalize_insight_label(text: str) -> str:
     return label[:1].upper() + label[1:] if label else ""
 
 
+def enforce_insight_status(title: str, text: str, proposed_status: str) -> str:
+    """Keep alert colors aligned with favorable and unfavorable finance semantics."""
+    narrative = f"{title} {text}".lower()
+    unfavorable_cost = bool(re.search(
+        r"\b(?:expense|cost|credit provision)\b.{0,80}\b(?:above|over|exceeded|exceeding) budget\b",
+        narrative,
+    ))
+    unfavorable_risk = bool(re.search(
+        r"\b(?:npl|delinquen|loss|risk)\b.{0,80}\b(?:rose|increased|worsened|deteriorated|above target)\b",
+        narrative,
+    ))
+    favorable_performance = bool(re.search(
+        r"\b(?:revenue|fee|profit|margin|loan|deposit)\b.{0,100}"
+        r"\b(?:above target|exceed(?:ed|ing) target|outperform(?:ed|ing)? target|surpass(?:ed|ing)? target)\b",
+        narrative,
+    ))
+    favorable_cost = bool(re.search(
+        r"\b(?:expense|cost|credit provision)\b.{0,80}\b(?:below|under) budget\b",
+        narrative,
+    ))
+    if unfavorable_cost or unfavorable_risk:
+        return "Critical"
+    if favorable_performance or favorable_cost:
+        return "Positive"
+    return proposed_status
+
+
 def format_insight_text_html(text: str) -> str:
     """Escape insight text and bold only measurable amounts and percentages."""
     safe_text = escape(text)
@@ -531,8 +558,9 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
         response = client.responses.create(
             model=st.secrets.get("OPENAI_MODEL", "gpt-5-mini"),
             instructions=(
-                "Act as a CFO reviewing one selected reporting period. Analyze every supplied raw record, clean monthly KPI record, calculated "
-                "metric record, and deterministic rule alert. Decide what is genuinely most material for this period; do not always choose the "
+                "Act as a CFO reviewing one selected reporting period. Treat clean monthly KPI records and calculated metric records as the only "
+                "authoritative numerical evidence, and use deterministic rule alerts as reviewed exception signals. Raw source records are intentionally "
+                "excluded because they contain controlled data-quality defects. Decide what is genuinely most material for this period; do not always choose the "
                 "same metrics or reuse a fixed template. Consider target gaps, expense pressure, trend reversals, margin, cost-to-income, NPL, "
                 "loan-to-deposit, fee concentration, and alert persistence. Return JSON only with: "
                 '{"executive_summary":"one Overall sentence followed by one sentence per supplied business unit","business_reviews":['
@@ -611,6 +639,7 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 title = normalize_insight_label(str(insight.get("title", "")))
                 message = normalize_llm_sentence(str(insight.get("text", "")))
                 insight_status = str(insight.get("status", status))
+                insight_status = enforce_insight_status(title, message, insight_status)
                 if (
                     title and message and "forecast" not in title.lower()
                     and title.lower() not in insight_titles
@@ -620,7 +649,12 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                     insights.append({"title": title, "text": message, "status": insight_status})
                     insight_titles.add(title.lower())
             if len(insights) >= 2:
-                reviews.append({"business_unit": unit, "status": status, "insights": insights[:2]})
+                status_rank = {"Critical": 0, "Caution": 1, "Positive": 2}
+                review_status = min(
+                    (insight["status"] for insight in insights[:2]),
+                    key=status_rank.get,
+                )
+                reviews.append({"business_unit": unit, "status": review_status, "insights": insights[:2]})
                 seen.add(unit)
         generated_reviews = {review["business_unit"]: review for review in reviews}
         fallback_review_map = {review["business_unit"]: review for review in fallback_reviews}
@@ -1435,7 +1469,6 @@ overall_performance = {
     "expense_variance": float(total_expense / total_expense_budget - 1),
 }
 current_alerts = alerts.loc[alerts["period"].between(selected_start, selected_end) & alerts["business_unit"].isin(selected_units)]
-raw_period_evidence = load_raw_source_evidence(selected_start, selected_end, tuple(selected_units))
 period_calculation_evidence = detail.loc[
     detail["period"].between(selected_start, selected_end) & detail["business_unit"].isin(selected_units)
 ]
@@ -1497,12 +1530,11 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 14,
+    "version": 15,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
     "department_summary_fallbacks": department_summary_fallbacks,
-    "raw_source_records": raw_period_evidence,
     "clean_monthly_kpis": dataframe_records(period_kpis),
     "calculated_metric_records": dataframe_records(period_calculation_evidence),
     "deterministic_rule_alerts": dataframe_records(current_alerts),
