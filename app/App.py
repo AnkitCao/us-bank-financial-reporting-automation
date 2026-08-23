@@ -1144,6 +1144,15 @@ st.markdown(
       [data-baseweb="popover"]:has([role="option"]) {
         translate:calc(50% + 18px) 0 !important;
       }
+      /* Month and Year menus contain different option counts, so their
+         zoomed BaseWeb portals lose different vertical offsets. Keep the
+         already-correct Quarter menu untouched and realign these two only. */
+      [data-baseweb="popover"]:has([role="option"]:nth-of-type(6)) {
+        translate:calc(50% + 18px) 538px !important;
+      }
+      [data-baseweb="popover"]:has([role="option"]:nth-of-type(2)):not(:has([role="option"]:nth-of-type(3))) {
+        translate:calc(50% + 18px) 269px !important;
+      }
       /* The date-range calendar uses a separate portal and loses both axes
          under page zoom. Align it below the fixed sidebar date input. */
       [data-baseweb="popover"]:has([data-baseweb="calendar"]) {
