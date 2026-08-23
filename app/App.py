@@ -1134,7 +1134,7 @@ st.markdown(
       [data-testid="stSidebar"] h3 { font-size:2rem !important; font-weight:800 !important; margin-top:0 !important; margin-bottom:1.15rem !important; }
       [data-testid="stSidebar"] h3,
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] { margin-left:.8rem !important; }
-      [data-testid="stSidebar"] label p { font-size:1.4rem !important; font-weight:800 !important; line-height:1.2 !important; }
+      [data-testid="stSidebar"] label p { font-size:1.8rem !important; font-weight:800 !important; line-height:1.2 !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
@@ -1175,7 +1175,7 @@ st.markdown(
         padding-top:0 !important;
         padding-bottom:0 !important;
       }
-      [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.4rem !important; }
+      [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.8rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button p { font-size:1.5rem !important; }
       [data-testid="stSidebar"] [data-baseweb="tag"] span { font-size:1.35rem !important; white-space:nowrap !important; overflow:visible !important; text-overflow:clip !important; color:#001E79 !important; }
