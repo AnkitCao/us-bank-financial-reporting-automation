@@ -932,7 +932,7 @@ st.markdown(
       .alert-group { display:grid; grid-template-columns:325px 1fr; column-gap:10px; background:transparent; border:0; border-left:8px solid var(--alert-color); border-radius:11px 0 0 11px; margin-bottom:12px; overflow:visible; }
       .alert-group-red { --alert-color:#FF3B30; --alert-title:#C62828; }
       .alert-group-yellow { --alert-color:#E5B400; --alert-title:#D99F00; }
-      .alert-group-green { --alert-color:#198754; --alert-title:#198754; }
+      .alert-group-green { --alert-color:#2563EB; --alert-title:#2563EB; }
       .alert-business { display:flex; align-items:center; min-height:96px; padding:14px 22px; color:#001E79; background:#F1F4FA; border:1px solid #DCE2F3; border-left:0; border-radius:0 10px 10px 0; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
       .alert-list { display:flex; flex-direction:column; min-width:0; }
       .alert { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:10px; flex:1; border:0; padding:0; margin:0; font-size:1.55rem; line-height:1.35; }
