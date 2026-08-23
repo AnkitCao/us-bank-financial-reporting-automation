@@ -961,10 +961,10 @@ st.markdown(
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
         font-family:"Times New Roman", Times, serif !important;
-        font-size:.825rem !important;
+        font-size:.6rem !important;
         line-height:1.25 !important;
       }
-      [data-baseweb="popover"] [role="option"] { min-height:2rem !important; padding:.35rem .55rem !important; }
+      [data-baseweb="popover"] [role="option"] { min-height:1.5rem !important; padding:.2rem .4rem !important; }
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.8rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button p { font-size:1.5rem !important; }
