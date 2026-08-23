@@ -996,15 +996,39 @@ st.markdown(
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
-      /* Select menus are rendered in an unscaled portal outside .stApp.
-         Scale the portal once, instead of competing with BaseWeb's computed widths. */
+      /* Select menus are portaled outside the scaled app. Give every BaseWeb
+         menu layer one explicit visual width so content cannot stretch or vanish. */
       [data-baseweb="popover"]:has([role="option"]) {
-        zoom:.5 !important;
+        width:365px !important;
+        min-width:365px !important;
+        max-width:365px !important;
         margin-left:-42px !important;
+        overflow:visible !important;
+      }
+      [data-baseweb="popover"]:has([role="option"]) > div,
+      [data-baseweb="popover"]:has([role="option"]) [data-baseweb="menu"],
+      [data-baseweb="popover"]:has([role="option"]) [role="listbox"] {
+        width:365px !important;
+        min-width:365px !important;
+        max-width:365px !important;
+        overflow-x:hidden !important;
       }
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
         font-family:"Times New Roman", Times, serif !important;
+        font-size:1rem !important;
+        line-height:1.25 !important;
+        visibility:visible !important;
+      }
+      [data-baseweb="popover"] [role="option"] {
+        display:flex !important;
+        align-items:center !important;
+        width:100% !important;
+        min-height:42px !important;
+        padding:8px 12px !important;
+        white-space:nowrap !important;
+        overflow:hidden !important;
+        text-overflow:ellipsis !important;
       }
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.4rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
