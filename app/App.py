@@ -368,14 +368,17 @@ def base_layout(fig: go.Figure, title: str, subtitle: str) -> go.Figure:
 def add_chart_summary(fig: go.Figure, summary: str) -> go.Figure:
     """Add a visible conclusion as a dedicated third title line."""
     current_title = fig.layout.title.text or ""
-    summary_lines = textwrap.wrap(summary, width=105, break_long_words=False, break_on_hyphens=False)
-    summary_html = "<br>".join(escape(line) for line in summary_lines[:2])
+    # Plotly titles do not wrap automatically.  These charts render two per row,
+    # so wrap the conclusion to the usable card width before inserting it.
+    summary_lines = textwrap.wrap(summary, width=62, break_long_words=False, break_on_hyphens=False)
+    summary_html = "<br>".join(escape(line) for line in summary_lines[:3])
+    title_margin = 198 + max(0, len(summary_lines[:3]) - 1) * 34
     fig.update_layout(
         title_text=(
             f"{current_title}<br>"
             f"<span style='font-size:21px;color:#334155'><b>★</b> {summary_html}</span>"
         ),
-        margin=dict(t=226 if len(summary_lines) > 1 else 198),
+        margin=dict(t=title_margin),
     )
     return fig
 
@@ -799,7 +802,7 @@ st.set_page_config(page_title="Automated Three-Business Performance Dashboard", 
 st.markdown(
     """
     <style>
-      .stApp { width:200%; max-width:none !important; transform:scale(.5); transform-origin:top left; }
+      .stApp { width:200%; min-height:200vh; max-width:none !important; transform:scale(.5); transform-origin:top left; }
       html, body, .stApp, .stApp * { font-family:"Times New Roman", Times, serif !important; box-sizing:border-box; }
       html, body, .stApp { background:#F5F7FA; overflow-x:hidden; }
       html, body { max-width:100%; }
