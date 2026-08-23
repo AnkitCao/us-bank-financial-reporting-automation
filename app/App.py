@@ -978,7 +978,17 @@ st.markdown(
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
-      [data-baseweb="popover"]:has([role="option"]) { min-width:180px !important; width:180px !important; max-width:180px !important; }
+      [data-baseweb="popover"]:has([role="option"]) {
+        min-width:360px !important;
+        width:360px !important;
+        max-width:360px !important;
+        margin-left:-42px !important;
+      }
+      [data-baseweb="popover"] [role="listbox"] {
+        min-width:360px !important;
+        width:360px !important;
+        max-width:360px !important;
+      }
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
         font-family:"Times New Roman", Times, serif !important;
