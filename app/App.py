@@ -357,9 +357,10 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "$10.4M, 4.2% above budget. Replace every example value with overall_performance values. Use below "
                 "target or below budget for negative variances. Never add another number to the first sentence. Never describe overall performance "
                 "without these four figures. After the Overall sentence, write exactly one separate sentence for each supplied business unit, in "
-                "the supplied order. Each department sentence must start with its business-unit name, state only its most useful factual condition, "
-                "contain no more than 18 words, and use no more than two numeric values. Avoid repetitive phrases such as Actual Revenue and Budget "
-                "Revenue when revenue and its variance communicate the same fact. Return exactly one review for each supplied "
+                "the supplied order. Each department sentence must start with its business-unit name and use that unit's aggregated values for the "
+                "entire selected reporting period, never a single month inside a quarter or year. State aggregated revenue and its percentage variance "
+                "versus target as one complete factual sentence. Use no more than 18 words and two numeric values. Avoid repetitive phrases such as "
+                "Actual Revenue and Budget Revenue when revenue and its variance communicate the same fact. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
                 "Return one or two insights per business unit. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
                 "from the supplied data, such as an amount, percentage, ratio, variance, or numeric month count. A calendar year alone does not "
@@ -414,10 +415,14 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
         canonical_first_sentence = overall_performance_sentence(facts["overall_performance"])
         department_lines = []
         for unit in facts["selected_business_units"]:
+            fallback_line = facts["department_summary_fallbacks"][unit]
             generated_line = next(
                 (sentence for sentence in generated_sentences if sentence.startswith(unit)),
-                facts["department_summary_fallbacks"][unit],
+                fallback_line,
             )
+            required_values = re.findall(r"\$\d+(?:\.\d+)?M|\d+(?:\.\d+)?%", fallback_line)
+            if not all(value in generated_line for value in required_values):
+                generated_line = fallback_line
             department_lines.append(generated_line)
         summary = " ".join([canonical_first_sentence, *department_lines])
         return {"executive_summary": summary, "business_reviews": reviews}
@@ -978,24 +983,16 @@ st.markdown(
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
+      /* Select menus are rendered in an unscaled portal outside .stApp.
+         Scale the portal once, instead of competing with BaseWeb's computed widths. */
       [data-baseweb="popover"]:has([role="option"]) {
-        min-width:360px !important;
-        width:360px !important;
-        max-width:360px !important;
+        zoom:.5 !important;
         margin-left:-42px !important;
-      }
-      [data-baseweb="popover"] [role="listbox"] {
-        min-width:360px !important;
-        width:360px !important;
-        max-width:360px !important;
       }
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
         font-family:"Times New Roman", Times, serif !important;
-        font-size:.45rem !important;
-        line-height:1.25 !important;
       }
-      [data-baseweb="popover"] [role="option"] { min-height:1.5rem !important; padding:.2rem .4rem !important; }
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.4rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button p { font-size:1.5rem !important; }
