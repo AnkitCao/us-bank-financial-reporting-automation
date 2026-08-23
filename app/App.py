@@ -669,14 +669,15 @@ def add_chart_summary(fig: go.Figure, summary: str) -> go.Figure:
 
 
 def render_plotly_chart(fig: go.Figure, height: int) -> None:
-    """Render at the pre-scale card width so the 50% page transform stays crisp."""
+    """Render a crisp Plotly figure inside a subtly bordered chart card."""
     # Streamlit measures Plotly after the app's 50% transform, which otherwise
     # compresses a chart into half of its card. Render at double resolution inside
     # an iframe, then scale that canvas once inside the iframe and once with the app.
-    chart_width = 1760
+    card_gutter = 8
+    chart_width = 1728
     chart_height = round(height * 2.36)
-    frame_width = chart_width // 2
-    frame_height = chart_height // 2
+    frame_width = chart_width // 2 + card_gutter * 2
+    frame_height = chart_height // 2 + card_gutter * 2
 
     def doubled(value: object) -> object:
         return value * 2 if isinstance(value, (int, float)) else value
@@ -721,9 +722,13 @@ def render_plotly_chart(fig: go.Figure, height: int) -> None:
         config={"displayModeBar": False, "responsive": False},
     )
     components.html(
-        "<style>html,body{margin:0;overflow:hidden;background:#fff;}"
-        ".scaled-chart{width:1760px;height:auto;transform:scale(.5);transform-origin:top left;}"
-        f"</style><div class='scaled-chart'>{chart_html}</div>",
+        "<style>"
+        "html,body{margin:0;overflow:hidden;background:transparent;}"
+        ".chart-card{position:relative;margin:8px;width:864px;height:"
+        f"{chart_height // 2}px;background:#fff;border:1px solid #DCE3EC;border-radius:10px;"
+        "box-shadow:0 4px 14px rgba(15,23,42,.08);overflow:hidden;}"
+        ".scaled-chart{width:1728px;height:auto;transform:scale(.5);transform-origin:top left;}"
+        f"</style><div class='chart-card'><div class='scaled-chart'>{chart_html}</div></div>",
         height=frame_height,
         width=frame_width,
         scrolling=False,
