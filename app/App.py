@@ -1144,6 +1144,11 @@ st.markdown(
       [data-baseweb="popover"]:has([role="option"]) {
         translate:calc(50% + 18px) 0 !important;
       }
+      /* The date-range calendar uses a separate portal and loses both axes
+         under page zoom. Align it below the fixed sidebar date input. */
+      [data-baseweb="popover"]:has([data-baseweb="calendar"]) {
+        translate:calc(25% + 18px) 499px !important;
+      }
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
         font-family:"Times New Roman", Times, serif !important;
@@ -1158,11 +1163,17 @@ st.markdown(
         display:flex !important;
         align-items:center !important;
         width:100% !important;
-        min-height:4rem !important;
-        padding:.6rem .8rem !important;
+        min-height:2.6rem !important;
+        padding:.18rem .8rem !important;
+        margin:0 !important;
         white-space:nowrap !important;
         overflow:hidden !important;
         text-overflow:ellipsis !important;
+      }
+      [data-baseweb="popover"] [data-baseweb="menu"],
+      [data-baseweb="popover"] [role="listbox"] {
+        padding-top:0 !important;
+        padding-bottom:0 !important;
       }
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.4rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
@@ -1393,7 +1404,12 @@ for business_unit in selected_units:
     has_alert = not current_alerts.loc[current_alerts["business_unit"].eq(business_unit)].empty
     if has_alert:
         alert_items = []
-        for insight in review["insights"]:
+        insight_priority = {"Critical": 0, "Caution": 1, "Positive": 2}
+        ordered_insights = sorted(
+            review["insights"],
+            key=lambda insight: insight_priority[insight_display_status(insight)],
+        )
+        for insight in ordered_insights:
             insight_color = status_css[insight_display_status(insight)]
             alert_items.append(
                 f"<div class='alert-insight alert-insight-{insight_color}'>"
