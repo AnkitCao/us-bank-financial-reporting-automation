@@ -175,18 +175,18 @@ def normalize_llm_sentence(text: str) -> str:
     normalized = re.sub(r"&#x?20;|&nbsp;", " ", str(text), flags=re.IGNORECASE)
     normalized = normalized.replace("：", ":").replace("—", ", ").replace("–", ", ").replace("·", ": ").replace("•", "")
     field_names = {
-        "revenue_actual": "Revenue",
-        "revenue_budget": "Revenue target",
-        "revenue_target": "Revenue target",
-        "adjusted_profit_actual": "Adjusted profit",
-        "adjusted_profit_budget": "Adjusted profit target",
-        "adjusted_profit_target": "Adjusted profit target",
-        "operating_expense_actual": "Operating expenses",
-        "operating_expense_budget": "Operating expense budget",
-        "credit_provision_actual": "Credit provision",
-        "Revenue actual": "Revenue",
-        "Operating Expense actual": "Operating expenses",
-        "Credit Provision actual": "Credit provision",
+        "revenue_actual": "revenue",
+        "revenue_budget": "revenue target",
+        "revenue_target": "revenue target",
+        "adjusted_profit_actual": "adjusted profit",
+        "adjusted_profit_budget": "adjusted profit target",
+        "adjusted_profit_target": "adjusted profit target",
+        "operating_expense_actual": "operating expenses",
+        "operating_expense_budget": "operating expense budget",
+        "credit_provision_actual": "credit provision",
+        "Revenue actual": "revenue",
+        "Operating Expense actual": "operating expenses",
+        "Credit Provision actual": "credit provision",
     }
     for source_name, display_name in field_names.items():
         normalized = normalized.replace(source_name, display_name)
@@ -203,13 +203,23 @@ def normalize_llm_sentence(text: str) -> str:
     for source_name, display_name in terminology.items():
         normalized = re.sub(re.escape(source_name), display_name, normalized, flags=re.IGNORECASE)
     natural_names = {
-        "Actual Revenue": "Revenue",
-        "Actual Adjusted Profit": "Adjusted profit",
-        "Actual Operating Expense": "Operating expenses",
-        "Actual Credit Provision": "Credit provision",
+        "Actual Revenue": "revenue",
+        "Target Revenue": "revenue target",
+        "Actual Adjusted Profit": "adjusted profit",
+        "Target Adjusted Profit": "adjusted profit target",
+        "Actual Operating Expense": "operating expenses",
+        "Actual Credit Provision": "credit provision",
+        "Target Loan Balance": "loan target",
+        "Target Deposit Balance": "deposit target",
+        "Commercial Mortgage Balance": "mortgage portfolio",
+        "CRE Loan Balance": "CRE loan portfolio",
+        "Loan Balance": "loans",
+        "Deposit Balance": "deposits",
     }
     for source_name, display_name in natural_names.items():
         normalized = re.sub(re.escape(source_name), display_name, normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bTarget\b", "target", normalized)
+    normalized = re.sub(r"\bBudget\b", "budget", normalized)
     normalized = re.sub(r"(?<=\d)\s+(?:percentage\s+)?points?\b", "%", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"(?<![\w.])-?\d+\.\d{2,}(?!\w)", lambda match: f"{float(match.group()):.1f}", normalized)
     normalized = " ".join(normalized.split())
@@ -427,7 +437,10 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "than merely listing metric names and values. Vary sentence structure naturally across departments; do not force all three lines into "
                 "the same template or discuss the same metric for every department. Write for fluent executive read-aloud, using natural phrases such "
                 "as revenue, adjusted profit, expenses, loans, and deposits instead of mechanically reproducing source column labels such as Actual "
-                "Revenue or Actual Operating Expense. A month-specific finding is allowed inside a quarter or year only when it explains a "
+                "Revenue or Actual Operating Expense. Shorten Loan Balance to loans and Commercial Mortgage Balance to mortgage portfolio when the "
+                "business-unit context makes the meaning clear. Retain a full metric name only when shortening it would create ambiguity. In narrative "
+                "sentences, always write target and budget in lowercase; do not alternate capitalization. A month-specific finding is allowed inside "
+                "a quarter or year only when it explains a "
                 "material change within that selected period. Revenue, profit, margin, loan, deposit, NPL, fee, and every other non-cost metric must "
                 "always use Target terminology and must never use Budget, above budget, or below budget. Only expense, cost, and credit-provision "
                 "metrics may use Budget terminology. Avoid repetitive phrases such as Actual Revenue and Target Revenue when revenue and its "
@@ -440,7 +453,8 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
                 "Forecast. Forecast is forbidden even if it appears in source data. Use only Actual, Target, expense Budget, and Prior Year facts. "
                 "Whenever a metric name and value appear together, use concise natural business language rather than copying database column names. "
-                "Prefer forms such as revenue reached $11.3M, adjusted profit rose to $7.3M, or operating expenses exceeded budget by $0.3M. "
+                "Prefer forms such as revenue reached $11.3M, loans exceeded target by $42.3M, the mortgage portfolio reached $2,108.0M, or operating "
+                "expenses exceeded budget by $0.3M. Use lowercase target and budget throughout narrative text. "
                 "Do not write labels such as Actual Revenue, Revenue actual, Actual Operating Expense, or Expense actual. Give every insight "
                 "its own short decision-oriented title. Return plain text only inside JSON: no HTML, Markdown, entities such as &#x20;, bullets, or "
                 "bold markup. Do not put a colon in title or text; the interface adds an English colon and all visual formatting. State the result first, "
@@ -1280,7 +1294,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 8,
+    "version": 9,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
