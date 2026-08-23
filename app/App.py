@@ -175,18 +175,18 @@ def normalize_llm_sentence(text: str) -> str:
     normalized = re.sub(r"&#x?20;|&nbsp;", " ", str(text), flags=re.IGNORECASE)
     normalized = normalized.replace("：", ":").replace("—", ", ").replace("–", ", ").replace("·", ": ").replace("•", "")
     field_names = {
-        "revenue_actual": "Actual Revenue",
-        "revenue_budget": "Target Revenue",
-        "revenue_target": "Target Revenue",
-        "adjusted_profit_actual": "Actual Adjusted Profit",
-        "adjusted_profit_budget": "Target Adjusted Profit",
-        "adjusted_profit_target": "Target Adjusted Profit",
-        "operating_expense_actual": "Actual Operating Expense",
-        "operating_expense_budget": "Budget Operating Expense",
-        "credit_provision_actual": "Actual Credit Provision",
-        "Revenue actual": "Actual Revenue",
-        "Operating Expense actual": "Actual Operating Expense",
-        "Credit Provision actual": "Actual Credit Provision",
+        "revenue_actual": "Revenue",
+        "revenue_budget": "Revenue target",
+        "revenue_target": "Revenue target",
+        "adjusted_profit_actual": "Adjusted profit",
+        "adjusted_profit_budget": "Adjusted profit target",
+        "adjusted_profit_target": "Adjusted profit target",
+        "operating_expense_actual": "Operating expenses",
+        "operating_expense_budget": "Operating expense budget",
+        "credit_provision_actual": "Credit provision",
+        "Revenue actual": "Revenue",
+        "Operating Expense actual": "Operating expenses",
+        "Credit Provision actual": "Credit provision",
     }
     for source_name, display_name in field_names.items():
         normalized = normalized.replace(source_name, display_name)
@@ -201,6 +201,14 @@ def normalize_llm_sentence(text: str) -> str:
         "Budget Deposit Balance": "Target Deposit Balance",
     }
     for source_name, display_name in terminology.items():
+        normalized = re.sub(re.escape(source_name), display_name, normalized, flags=re.IGNORECASE)
+    natural_names = {
+        "Actual Revenue": "Revenue",
+        "Actual Adjusted Profit": "Adjusted profit",
+        "Actual Operating Expense": "Operating expenses",
+        "Actual Credit Provision": "Credit provision",
+    }
+    for source_name, display_name in natural_names.items():
         normalized = re.sub(re.escape(source_name), display_name, normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"(?<=\d)\s+(?:percentage\s+)?points?\b", "%", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"(?<![\w.])-?\d+\.\d{2,}(?!\w)", lambda match: f"{float(match.group()):.1f}", normalized)
@@ -280,12 +288,17 @@ def overall_performance_sentence(overall: dict) -> str:
 
 
 def department_performance_sentence(row: pd.Series) -> str:
-    """Create one concise, auditable department line for the executive summary."""
+    """Create a concise, department-specific fallback rather than repeating one template."""
+    unit = str(row["business_unit"])
+    if unit == "Capital Markets":
+        direction = "above target" if row["adjusted_profit_vs_budget"] >= 0 else "below target"
+        return f"Capital Markets delivered {fmt_money(row['adjusted_profit_actual'])} in adjusted profit, {abs(row['adjusted_profit_vs_budget']):.1%} {direction}."
+    if unit == "Commercial Banking" and pd.notna(row.get("loan_to_deposit_ratio_actual")):
+        return f"Commercial Banking's loan-to-deposit ratio was {row['loan_to_deposit_ratio_actual']:.1%}, while revenue reached {fmt_money(row['revenue_actual'])}."
+    if unit == "Commercial Real Estate" and pd.notna(row.get("npl_ratio_actual")):
+        return f"Commercial Real Estate's NPL ratio was {row['npl_ratio_actual']:.1%}, with a {row['profit_margin_actual']:.1%} profit margin."
     direction = "above target" if row["revenue_vs_budget"] >= 0 else "below target"
-    return (
-        f"{row['business_unit']} generated {fmt_money(row['revenue_actual'])} in revenue, "
-        f"{abs(row['revenue_vs_budget']):.1%} {direction}."
-    )
+    return f"{unit} generated {fmt_money(row['revenue_actual'])}, {abs(row['revenue_vs_budget']):.1%} {direction}."
 
 
 def format_chart_period_range(frame: pd.DataFrame) -> str:
@@ -411,7 +424,10 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "choose the one or two findings that are most material and worthy of executive attention; do not default to revenue or expense. Combine "
                 "those findings into one complete sentence that starts with the business-unit name, uses only figures supported by the selected-period "
                 "records, contains no more than 32 words and four numeric values, and states a clear comparison, change, high, low, or exception rather "
-                "than merely listing metric names and values. A month-specific finding is allowed inside a quarter or year only when it explains a "
+                "than merely listing metric names and values. Vary sentence structure naturally across departments; do not force all three lines into "
+                "the same template or discuss the same metric for every department. Write for fluent executive read-aloud, using natural phrases such "
+                "as revenue, adjusted profit, expenses, loans, and deposits instead of mechanically reproducing source column labels such as Actual "
+                "Revenue or Actual Operating Expense. A month-specific finding is allowed inside a quarter or year only when it explains a "
                 "material change within that selected period. Revenue, profit, margin, loan, deposit, NPL, fee, and every other non-cost metric must "
                 "always use Target terminology and must never use Budget, above budget, or below budget. Only expense, cost, and credit-provision "
                 "metrics may use Budget terminology. Avoid repetitive phrases such as Actual Revenue and Target Revenue when revenue and its "
@@ -423,9 +439,9 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "with the % symbol and never use point, points, percentage point, or percentage points. Preserve all numbers and periods "
                 "exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
                 "Forecast. Forecast is forbidden even if it appears in source data. Use only Actual, Target, expense Budget, and Prior Year facts. "
-                "Whenever a metric name and value appear together, use Metric "
-                "Name (value), using natural adjective-first names such as Actual Revenue ($11.3M), Target Revenue ($9.5M), Actual "
-                "Operating Expense ($4.0M), and Budget Operating Expense ($3.7M). Never write Revenue actual or Expense actual. Give every insight "
+                "Whenever a metric name and value appear together, use concise natural business language rather than copying database column names. "
+                "Prefer forms such as revenue reached $11.3M, adjusted profit rose to $7.3M, or operating expenses exceeded budget by $0.3M. "
+                "Do not write labels such as Actual Revenue, Revenue actual, Actual Operating Expense, or Expense actual. Give every insight "
                 "its own short decision-oriented title. Return plain text only inside JSON: no HTML, Markdown, entities such as &#x20;, bullets, or "
                 "bold markup. Do not put a colon in title or text; the interface adds an English colon and all visual formatting. State the result first, "
                 "then the comparison. When Actual and Budget are available, calculate and state the variance, using natural language such as "
@@ -1261,7 +1277,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 7,
+    "version": 8,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
