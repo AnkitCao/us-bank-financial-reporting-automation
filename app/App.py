@@ -142,11 +142,29 @@ def sanitize_llm_evidence(value):
                 cleaned.append(sanitized_item)
         return cleaned
     if isinstance(value, dict):
-        return {
-            key: sanitize_llm_evidence(item)
-            for key, item in value.items()
-            if "forecast" not in str(key).lower()
-        }
+        cleaned = {}
+        target_metric_prefixes = (
+            "revenue", "adjusted_profit", "profit_margin", "loan", "deposit", "npl", "fee",
+            "advisory", "underwriting", "trading", "structuring", "syndication",
+        )
+        for key, item in value.items():
+            key_text = str(key)
+            if "forecast" in key_text.lower():
+                continue
+            display_key = key_text
+            if "budget" in key_text.lower() and key_text.lower().startswith(target_metric_prefixes):
+                display_key = re.sub("budget", "target", key_text, flags=re.IGNORECASE)
+            cleaned[display_key] = sanitize_llm_evidence(item)
+        metric_name = " ".join(
+            str(value.get(key, ""))
+            for key in ("metric_type", "source_metric", "management_category", "metric", "label")
+        ).lower()
+        is_cost_metric = any(token in metric_name for token in ("expense", "cost", "credit provision", "loss provision"))
+        if not is_cost_metric:
+            for scenario_key in ("scenario", "Plan Type", "Plan Case", "Plan Scenario"):
+                if cleaned.get(scenario_key) == "Budget":
+                    cleaned[scenario_key] = "Target"
+        return cleaned
     if isinstance(value, str) and "forecast" in value.lower():
         return None
     return value
@@ -158,8 +176,11 @@ def normalize_llm_sentence(text: str) -> str:
     normalized = normalized.replace("：", ":").replace("—", ", ").replace("–", ", ").replace("·", ": ").replace("•", "")
     field_names = {
         "revenue_actual": "Actual Revenue",
-        "revenue_budget": "Budget Revenue",
+        "revenue_budget": "Target Revenue",
+        "revenue_target": "Target Revenue",
         "adjusted_profit_actual": "Actual Adjusted Profit",
+        "adjusted_profit_budget": "Target Adjusted Profit",
+        "adjusted_profit_target": "Target Adjusted Profit",
         "operating_expense_actual": "Actual Operating Expense",
         "operating_expense_budget": "Budget Operating Expense",
         "credit_provision_actual": "Actual Credit Provision",
@@ -169,11 +190,32 @@ def normalize_llm_sentence(text: str) -> str:
     }
     for source_name, display_name in field_names.items():
         normalized = normalized.replace(source_name, display_name)
+    terminology = {
+        "Budget Revenue": "Target Revenue",
+        "Revenue Budget": "Revenue Target",
+        "Budget Adjusted Profit": "Target Adjusted Profit",
+        "Adjusted Profit Budget": "Adjusted Profit Target",
+        "Budget Profit": "Target Profit",
+        "Budget Margin": "Target Margin",
+        "Budget Loan Balance": "Target Loan Balance",
+        "Budget Deposit Balance": "Target Deposit Balance",
+    }
+    for source_name, display_name in terminology.items():
+        normalized = re.sub(re.escape(source_name), display_name, normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"(?<=\d)\s+(?:percentage\s+)?points?\b", "%", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"(?<![\w.])-?\d+\.\d{2,}(?!\w)", lambda match: f"{float(match.group()):.1f}", normalized)
     normalized = " ".join(normalized.split())
     normalized = re.sub(r"\s+([,:;.])", r"\1", normalized)
     if "forecast" in normalized.lower():
+        return ""
+    non_cost_budget = re.search(
+        r"(?:revenue|profit|margin|loan|deposit|npl|fee).{0,45}"
+        r"(?:above|below|exceed(?:ed|ing)?|versus|vs\.?|against|compared\s+with|compared\s+to)\s+(?:its\s+)?budget\b|"
+        r"\bbudget\s+(?:revenue|profit|margin|loan|deposit|npl|fee)",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if non_cost_budget:
         return ""
     if normalized and normalized[-1] not in ".!?":
         normalized += "."
@@ -202,6 +244,10 @@ def normalize_insight_label(text: str) -> str:
     """Keep insight headings short and visually consistent."""
     cleaned = re.sub(r"&#x?20;|&nbsp;", " ", str(text), flags=re.IGNORECASE)
     label = " ".join(cleaned.replace("：", ":").replace(":", "").split())
+    if "forecast" in label.lower():
+        return ""
+    if any(metric in label.lower() for metric in ("revenue", "profit", "margin", "loan", "deposit", "npl", "fee")):
+        label = re.sub(r"\bbudget\b", "target", label, flags=re.IGNORECASE)
     label = re.sub(r"\band\b", "&", label, flags=re.IGNORECASE)
     return label[:1].upper() + label[1:] if label else ""
 
@@ -310,11 +356,14 @@ def generate_chart_summary(chart_key: str, summary_dict: dict) -> str:
                 "amount, percentage, ratio, variance, or month count. Express every percentage difference with the % symbol; never use point, "
                 "points, percentage point, or percentage points. Format every decimal to exactly one decimal place. Never return a qualitative "
                 "trend statement without a number. Prioritize "
-                "the variance instead of repeating Actual, Budget, and Prior Year values. After naming a metric once, "
-                "use concise phrases such as above budget, below budget, above May, or above prior year. Do not repeatedly write long names such "
-                "as Actual Revenue, Budget Revenue, Actual Operating Expense, or Budget Operating Expense. Compare levels, period changes, target "
+                "the variance instead of repeating Actual, Target, Budget, and Prior Year values. After naming a metric once, "
+                "use concise phrases such as above target, above budget, below budget, above May, or above prior year. Revenue, profit, margin, "
+                "loan, deposit, NPL, fee, and every other non-cost metric must always be compared with Target and must never be described with Budget. "
+                "Only expense, cost, and credit-provision metrics may use Budget, above budget, or below budget. Do not repeatedly write long names such "
+                "as Actual Revenue, Target Revenue, Actual Operating Expense, or Budget Operating Expense. Compare levels, period changes, target "
                 "or budget gaps, and business differences only where material. "
-                "Never mention, analyze, compare, or output Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric "
+                "Never mention, analyze, compare, or output Forecast. Forecast is forbidden even if it appears in source data. Use only Actual, "
+                "Target, expense Budget, and Prior Year facts. Whenever a metric "
                 "name and its value appear together, write natural business language. Translate snake_case fields and synthesize figures rather "
                 "than mechanically listing fields. Format every displayed number to exactly one decimal place. End with a period. Do not use an "
                 "em dash or en dash. Preserve supplied facts; never invent causes, explanations, thresholds, recommendations, or missing values. "
@@ -363,7 +412,9 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "those findings into one complete sentence that starts with the business-unit name, uses only figures supported by the selected-period "
                 "records, contains no more than 32 words and four numeric values, and states a clear comparison, change, high, low, or exception rather "
                 "than merely listing metric names and values. A month-specific finding is allowed inside a quarter or year only when it explains a "
-                "material change within that selected period. Avoid repetitive phrases such as Actual Revenue and Budget Revenue when revenue and its "
+                "material change within that selected period. Revenue, profit, margin, loan, deposit, NPL, fee, and every other non-cost metric must "
+                "always use Target terminology and must never use Budget, above budget, or below budget. Only expense, cost, and credit-provision "
+                "metrics may use Budget terminology. Avoid repetitive phrases such as Actual Revenue and Target Revenue when revenue and its "
                 "variance communicate the same fact. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
                 "Return one or two insights per business unit. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
@@ -371,14 +422,16 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "satisfy this requirement. Never return a qualitative conclusion without quantitative evidence. Express percentage differences "
                 "with the % symbol and never use point, points, percentage point, or percentage points. Preserve all numbers and periods "
                 "exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
-                "Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric name and value appear together, use Metric "
-                "Name (value), using natural adjective-first names such as Actual Revenue ($11.3M), Budget Revenue ($9.5M), Actual "
+                "Forecast. Forecast is forbidden even if it appears in source data. Use only Actual, Target, expense Budget, and Prior Year facts. "
+                "Whenever a metric name and value appear together, use Metric "
+                "Name (value), using natural adjective-first names such as Actual Revenue ($11.3M), Target Revenue ($9.5M), Actual "
                 "Operating Expense ($4.0M), and Budget Operating Expense ($3.7M). Never write Revenue actual or Expense actual. Give every insight "
                 "its own short decision-oriented title. Return plain text only inside JSON: no HTML, Markdown, entities such as &#x20;, bullets, or "
                 "bold markup. Do not put a colon in title or text; the interface adds an English colon and all visual formatting. State the result first, "
                 "then the comparison. When Actual and Budget are available, calculate and state the variance, using natural language such as "
-                "Revenue reached $11.3M, exceeding budget by $1.8M. Use above budget, below budget, or in line with budget consistently. Avoid "
-                "repeating Actual Revenue and Budget Revenue when Revenue and the variance say the same thing. Translate technical field names "
+                "Revenue reached $11.3M, exceeding target by $1.8M. Use above target or below target for non-cost metrics; reserve above budget, "
+                "below budget, and in line with budget exclusively for expense, cost, and credit-provision metrics. Avoid "
+                "repeating Actual Revenue and Target Revenue when Revenue and the variance say the same thing. Translate technical field names "
                 "into natural finance language: revenue_actual becomes Actual Revenue, "
                 "adjusted_profit_actual becomes Actual Adjusted Profit, operating_expense_actual becomes Actual Operating Expense, and "
                 "credit_provision_actual becomes Actual Credit Provision. Do not expose snake_case field names or mechanically list fields. "
@@ -1208,7 +1261,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 6,
+    "version": 7,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
