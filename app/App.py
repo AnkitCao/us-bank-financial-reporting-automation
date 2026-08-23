@@ -227,9 +227,18 @@ def overall_performance_sentence(overall: dict) -> str:
     expense_direction = "above budget" if overall["expense_variance"] >= 0 else "below budget"
     subject = "the three businesses" if overall["business_unit_count"] == 3 else "the selected businesses"
     return (
-        f"Overall, {subject} generated {fmt_money(overall['revenue_actual'])} in revenue, "
-        f"{abs(overall['revenue_variance']):.1%} {revenue_direction}, while operating expenses totaled "
+        f"Overall, {subject} generated {fmt_money(overall['revenue_actual'])}, "
+        f"{abs(overall['revenue_variance']):.1%} {revenue_direction}; expenses were "
         f"{fmt_money(overall['operating_expense_actual'])}, {abs(overall['expense_variance']):.1%} {expense_direction}."
+    )
+
+
+def department_performance_sentence(row: pd.Series) -> str:
+    """Create one concise, auditable department line for the executive summary."""
+    direction = "above target" if row["revenue_vs_budget"] >= 0 else "below target"
+    return (
+        f"{row['business_unit']} generated {fmt_money(row['revenue_actual'])} in revenue, "
+        f"{abs(row['revenue_vs_budget']):.1%} {direction}."
     )
 
 
@@ -338,16 +347,19 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "metric record, and deterministic rule alert. Decide what is genuinely most material for this period; do not always choose the "
                 "same metrics or reuse a fixed template. Consider target gaps, expense pressure, trend reversals, margin, cost-to-income, NPL, "
                 "loan-to-deposit, fee concentration, and alert persistence. Return JSON only with: "
-                '{"executive_summary":"two or three short factual sentences","business_reviews":['
+                '{"executive_summary":"one Overall sentence followed by one sentence per supplied business unit","business_reviews":['
                 '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive","insights":['
                 '{"title":"plain-text headline of no more than four words","text":"one quantitative factual sentence"}]}]}. '
                 "The first executive-summary sentence must begin with Overall, and quantify the combined performance of all supplied business "
                 "units. It must include exactly four overall figures from overall_performance: combined actual revenue; revenue variance versus "
                 "target as a percentage; combined actual operating expense; and operating-expense variance versus budget as a percentage. Use "
-                "this exact structure with supplied values: Overall, the three businesses generated $31.5M in revenue, 6.9% above target, while "
-                "operating expenses totaled $10.4M, 4.2% above budget. Replace every example value with overall_performance values. Use below "
+                "this concise structure with supplied values: Overall, the three businesses generated $31.5M, 6.9% above target; expenses were "
+                "$10.4M, 4.2% above budget. Replace every example value with overall_performance values. Use below "
                 "target or below budget for negative variances. Never add another number to the first sentence. Never describe overall performance "
-                "without these four figures. Select the remaining one or two most decision-relevant period findings. Return exactly one review for each supplied "
+                "without these four figures. After the Overall sentence, write exactly one separate sentence for each supplied business unit, in "
+                "the supplied order. Each department sentence must start with its business-unit name, state only its most useful factual condition, "
+                "contain no more than 18 words, and use no more than two numeric values. Avoid repetitive phrases such as Actual Revenue and Budget "
+                "Revenue when revenue and its variance communicate the same fact. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
                 "Return one or two insights per business unit. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
                 "from the supplied data, such as an amount, percentage, ratio, variance, or numeric month count. A calendar year alone does not "
@@ -394,13 +406,20 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
         summary = normalize_llm_sentence(str(parsed.get("executive_summary", "")))
         if not summary or not every_sentence_has_quantitative_evidence(summary) or seen != allowed_units:
             return fallback
-        remaining_sentences = [
+        generated_sentences = [
             sentence.strip()
             for sentence in re.split(r"(?<=[.!?])\s+", summary)
             if sentence.strip()
-        ][1:3]
+        ][1:]
         canonical_first_sentence = overall_performance_sentence(facts["overall_performance"])
-        summary = " ".join([canonical_first_sentence, *remaining_sentences])
+        department_lines = []
+        for unit in facts["selected_business_units"]:
+            generated_line = next(
+                (sentence for sentence in generated_sentences if sentence.startswith(unit)),
+                facts["department_summary_fallbacks"][unit],
+            )
+            department_lines.append(generated_line)
+        summary = " ".join([canonical_first_sentence, *department_lines])
         return {"executive_summary": summary, "business_reviews": reviews}
     except Exception:
         return fallback
@@ -902,6 +921,8 @@ st.markdown(
       .creator-credit a:hover { color:#2563EB; }
       .brief strong { display:block; color:#0B2E6F; font-size:2.05rem; font-weight:800; line-height:1.15; margin-bottom:.7rem; }
       .summary-text { display:block; font-size:1.75rem; font-weight:700; line-height:1.45; }
+      .summary-line { display:block; }
+      .summary-line + .summary-line { margin-top:.28rem; }
       .attention-heading { display:flex; align-items:center; flex-wrap:wrap; gap:28px; margin:1.7rem 0 .8rem; }
       .attention-heading h2 { margin:0 !important; }
       .alert-legend { display:flex; align-items:center; gap:20px; color:#465269; font-size:1.25rem; font-weight:700; }
@@ -953,19 +974,19 @@ st.markdown(
       [data-testid="stSidebar"] h3 { font-size:2rem !important; font-weight:800 !important; margin-top:0 !important; margin-bottom:1.15rem !important; }
       [data-testid="stSidebar"] h3,
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] { margin-left:.8rem !important; }
-      [data-testid="stSidebar"] label p { font-size:1.8rem !important; font-weight:800 !important; line-height:1.2 !important; }
+      [data-testid="stSidebar"] label p { font-size:1.4rem !important; font-weight:800 !important; line-height:1.2 !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
-      [data-baseweb="popover"]:has([role="option"]) { min-width:220px !important; width:220px !important; max-width:220px !important; }
+      [data-baseweb="popover"]:has([role="option"]) { min-width:180px !important; width:180px !important; max-width:180px !important; }
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
         font-family:"Times New Roman", Times, serif !important;
-        font-size:.6rem !important;
+        font-size:.45rem !important;
         line-height:1.25 !important;
       }
       [data-baseweb="popover"] [role="option"] { min-height:1.5rem !important; padding:.2rem .4rem !important; }
-      [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.8rem !important; }
+      [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.4rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button p { font-size:1.5rem !important; }
       [data-testid="stSidebar"] [data-baseweb="tag"] span { font-size:1.35rem !important; white-space:nowrap !important; overflow:visible !important; text-overflow:clip !important; color:#001E79 !important; }
@@ -1102,8 +1123,15 @@ st.markdown(
 )
 st.title(f"Automated Three-Business Performance Dashboard – {selection_label}")
 
-summary_detail_fallback, attention_items = generate_executive_summary(period_kpis, current_alerts, selection_label)
-summary_fallback = f"{overall_performance_sentence(overall_performance)} {summary_detail_fallback}"
+_, attention_items = generate_executive_summary(period_kpis, current_alerts, selection_label)
+department_summary_fallbacks = {
+    str(row["business_unit"]): department_performance_sentence(row)
+    for _, row in current.iterrows()
+}
+summary_fallback = " ".join([
+    overall_performance_sentence(overall_performance),
+    *(department_summary_fallbacks[unit] for unit in selected_units),
+])
 severity_to_status = {"Red": "Critical", "Yellow": "Caution", "Green": "Positive"}
 severity_rank = {"Red": 0, "Yellow": 1, "Green": 2}
 fallback_reviews = []
@@ -1140,14 +1168,17 @@ period_review = generate_ai_period_review({
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
+    "department_summary_fallbacks": department_summary_fallbacks,
     "raw_source_records": raw_period_evidence,
     "clean_monthly_kpis": dataframe_records(period_kpis),
     "calculated_metric_records": dataframe_records(period_calculation_evidence),
     "deterministic_rule_alerts": dataframe_records(current_alerts),
 }, summary_fallback, fallback_reviews)
 summary = period_review["executive_summary"]
+summary_lines = [line.strip() for line in re.split(r"(?<=[.!?])\s+", summary) if line.strip()]
+summary_html = "".join(f"<span class='summary-line'>{escape(line)}</span>" for line in summary_lines)
 st.markdown(
-    f"<div class='brief'><strong>AI Executive Summary</strong><span class='summary-text'>{escape(summary)}</span></div>",
+    f"<div class='brief'><strong>AI Executive Summary</strong><span class='summary-text'>{summary_html}</span></div>",
     unsafe_allow_html=True,
 )
 st.markdown("<div class='kpi-spacer'></div>", unsafe_allow_html=True)
