@@ -154,7 +154,8 @@ def sanitize_llm_evidence(value):
 
 def normalize_llm_sentence(text: str) -> str:
     """Normalize one LLM sentence and reject forbidden forecast language."""
-    normalized = str(text).replace("—", ", ").replace("–", ", ").replace("·", ": ").replace("•", "")
+    normalized = re.sub(r"&#x?20;|&nbsp;", " ", str(text), flags=re.IGNORECASE)
+    normalized = normalized.replace("：", ":").replace("—", ", ").replace("–", ", ").replace("·", ": ").replace("•", "")
     field_names = {
         "revenue_actual": "Actual Revenue",
         "revenue_budget": "Budget Revenue",
@@ -199,9 +200,20 @@ def every_sentence_has_quantitative_evidence(text: str) -> bool:
 
 def normalize_insight_label(text: str) -> str:
     """Keep insight headings short and visually consistent."""
-    label = " ".join(str(text).replace(":", "").split())
+    cleaned = re.sub(r"&#x?20;|&nbsp;", " ", str(text), flags=re.IGNORECASE)
+    label = " ".join(cleaned.replace("：", ":").replace(":", "").split())
     label = re.sub(r"\band\b", "&", label, flags=re.IGNORECASE)
     return label[:1].upper() + label[1:] if label else ""
+
+
+def format_insight_text_html(text: str) -> str:
+    """Escape insight text and bold only measurable amounts and percentages."""
+    safe_text = escape(text)
+    return re.sub(
+        r"(\$[+-]?\d[\d,]*(?:\.\d+)?[MB]?|[+-]?\d+(?:\.\d+)?%)",
+        r"<strong>\1</strong>",
+        safe_text,
+    )
 
 
 def fmt_money(value: float) -> str:
@@ -315,20 +327,20 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "same metrics or reuse a fixed template. Consider target gaps, expense pressure, trend reversals, margin, cost-to-income, NPL, "
                 "loan-to-deposit, fee concentration, and alert persistence. Return JSON only with: "
                 '{"executive_summary":"exactly two short factual sentences","business_reviews":['
-                '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive",'
-                '"label":"decision-oriented headline of no more than six words","message":"one or two concise factual sentences"}]}. '
+                '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive","insights":['
+                '{"title":"plain-text headline of no more than four words","text":"one quantitative factual sentence"}]}]}. '
                 "Select the two most decision-relevant period findings for the executive summary. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
-                "Every executive-summary sentence and every business-review message must include at least one measurable Arabic-numeral value "
+                "Return one or two insights per business unit. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
                 "from the supplied data, such as an amount, percentage, ratio, variance, or numeric month count. A calendar year alone does not "
                 "satisfy this requirement. Never return a qualitative conclusion without quantitative evidence. Express percentage differences "
                 "with the % symbol and never use point, points, percentage point, or percentage points. Preserve all numbers and periods "
                 "exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
                 "Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric name and value appear together, use Metric "
                 "Name (value), using natural adjective-first names such as Actual Revenue ($11.3M), Budget Revenue ($9.5M), Actual "
-                "Operating Expense ($4.0M), and Budget Operating Expense ($3.7M). Never write Revenue actual or Expense actual. Create a short, "
-                "decision-oriented label and use & instead of the word and inside that label. Do not put a colon, bullet, middle dot, dash, or a "
-                "second label in either returned field; the interface adds one aligned colon between the label and message. State the result first, "
+                "Operating Expense ($4.0M), and Budget Operating Expense ($3.7M). Never write Revenue actual or Expense actual. Give every insight "
+                "its own short decision-oriented title. Return plain text only inside JSON: no HTML, Markdown, entities such as &#x20;, bullets, or "
+                "bold markup. Do not put a colon in title or text; the interface adds an English colon and all visual formatting. State the result first, "
                 "then the comparison. When Actual and Budget are available, calculate and state the variance, using natural language such as "
                 "Revenue reached $11.3M, exceeding budget by $1.8M. Use above budget, below budget, or in line with budget consistently. Avoid "
                 "repeating Actual Revenue and Budget Revenue when Revenue and the variance say the same thing. Translate technical field names "
@@ -352,12 +364,14 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
             status = str(item.get("status", ""))
             if unit not in allowed_units or unit in seen or status not in {"Critical", "Caution", "Positive"}:
                 continue
-            label = normalize_insight_label(str(item.get("label", "")))
-            message = normalize_llm_sentence(str(item.get("message", "")))
-            if "forecast" in label.lower():
-                continue
-            if label and message and every_sentence_has_quantitative_evidence(message):
-                reviews.append({"business_unit": unit, "status": status, "label": label, "message": message})
+            insights = []
+            for insight in item.get("insights", []):
+                title = normalize_insight_label(str(insight.get("title", "")))
+                message = normalize_llm_sentence(str(insight.get("text", "")))
+                if title and message and "forecast" not in title.lower() and every_sentence_has_quantitative_evidence(message):
+                    insights.append({"title": title, "text": message})
+            if insights:
+                reviews.append({"business_unit": unit, "status": status, "insights": insights[:2]})
                 seen.add(unit)
         summary = normalize_llm_sentence(str(parsed.get("executive_summary", "")))
         if not summary or not every_sentence_has_quantitative_evidence(summary) or seen != allowed_units:
@@ -875,9 +889,11 @@ st.markdown(
       .alert-group-green { --alert-color:#198754; --alert-title:#198754; }
       .alert-business { display:flex; align-items:center; min-height:96px; padding:18px 22px; color:#001E79; background:#F1F4FA; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
       .alert-list { display:flex; flex-direction:column; min-width:0; min-height:96px; }
-      .alert { display:flex; align-items:center; justify-content:flex-start; flex:1; border:0; border-bottom:1px solid #DCE2F3; border-radius:0; padding:14px 22px; margin:0; font-size:1.7rem; line-height:1.35; }
+      .alert { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:10px; flex:1; border:0; border-bottom:1px solid #DCE2F3; border-radius:0; padding:16px 20px; margin:0; font-size:1.55rem; line-height:1.35; }
       .alert:last-child { border-bottom:0; }
-      .alert-rule { color:var(--alert-title); font-weight:800; line-height:1.35; }
+      .alert-insight { color:#334155; background:#FAFBFD; border:1px solid #E2E8F0; border-radius:7px; padding:10px 14px; font-weight:400; }
+      .alert-insight-title { color:var(--alert-title); font-weight:800; }
+      .alert-insight strong { color:inherit; font-weight:800; }
       .score-wrap { overflow-x:auto; background:white; border-radius:10px; border:1px solid #DCE2F3; }
       .scorecard { width:100%; min-width:1200px; border-collapse:collapse; margin:0 !important; font-size:1.45rem; }
       .scorecard th { background:#001E79; color:white; border:2px solid white; padding:16px; text-align:center; font-size:1.5rem; }
@@ -903,6 +919,7 @@ st.markdown(
       .ratio-table tr:nth-child(even) { background:#F5F7FC; }
       .disclaimer { color:#687386; font-size:1.05rem; padding-top:18px; }
       [data-testid="stSidebar"] { min-width:500px; max-width:500px; }
+      [data-testid="stSidebarContent"], [data-testid="stSidebarUserContent"] { transform:translateZ(0); backface-visibility:hidden; }
       [data-testid="stSidebarNav"] a, [data-testid="stSidebarNav"] a span { font-size:2rem !important; font-weight:800 !important; line-height:1.2 !important; }
       [data-testid="stSidebarNav"] li { margin-bottom:.7rem !important; }
       [data-testid="stSidebarNav"] a { min-height:3.8rem !important; padding:.55rem .8rem !important; border-radius:10px !important; }
@@ -915,14 +932,14 @@ st.markdown(
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
-      [data-baseweb="popover"] [role="listbox"] { min-width:420px !important; }
+      [data-baseweb="popover"]:has([role="option"]) { min-width:220px !important; width:220px !important; max-width:220px !important; }
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
         font-family:"Times New Roman", Times, serif !important;
-        font-size:1.7rem !important;
+        font-size:.825rem !important;
         line-height:1.25 !important;
       }
-      [data-baseweb="popover"] [role="option"] { min-height:3.5rem !important; padding:.7rem 1rem !important; }
+      [data-baseweb="popover"] [role="option"] { min-height:2rem !important; padding:.35rem .55rem !important; }
       [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size:1.8rem !important; }
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button,
       [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button p { font-size:1.5rem !important; }
@@ -974,22 +991,22 @@ with st.sidebar:
     st.page_link("pages/1_Source_Data.py", label="Source Data for Three Businesses")
     st.markdown("<div class='nav-divider'></div>", unsafe_allow_html=True)
     st.markdown("### Review Controls")
-    time_mode = st.segmented_control("Time view", ["Month", "Quarter", "Year", "Custom Range"], default="Month")
+    time_mode = st.segmented_control("Time view", ["Month", "Quarter", "Year", "Custom Range"], default="Month", key="time_view")
     if time_mode == "Month":
-        selected_end = pd.Timestamp(st.selectbox("Reporting month", list(reversed(period_options)), format_func=lambda value: value.strftime("%B %Y")))
+        selected_end = pd.Timestamp(st.selectbox("Reporting month", list(reversed(period_options)), format_func=lambda value: value.strftime("%B %Y"), key="reporting_month"))
         selected_start = selected_end
         selection_label = selected_end.strftime("%B %Y")
         title_prefix = "Monthly"
     elif time_mode == "Quarter":
         quarter_options = sorted({period.to_period("Q") for period in period_options}, reverse=True)
-        selected_quarter = st.selectbox("Reporting quarter", quarter_options, format_func=lambda value: f"Q{value.quarter} {value.year}")
+        selected_quarter = st.selectbox("Reporting quarter", quarter_options, format_func=lambda value: f"Q{value.quarter} {value.year}", key="reporting_quarter")
         selected_start = pd.Timestamp(selected_quarter.start_time)
         selected_end = pd.Timestamp(selected_quarter.end_time).normalize()
         selection_label = f"Q{selected_quarter.quarter} {selected_quarter.year}"
         title_prefix = "Quarterly"
     elif time_mode == "Year":
         year_options = sorted({period.year for period in period_options}, reverse=True)
-        selected_year = int(st.selectbox("Reporting year", year_options))
+        selected_year = int(st.selectbox("Reporting year", year_options, key="reporting_year"))
         selected_start = pd.Timestamp(selected_year, 1, 1)
         selected_end = pd.Timestamp(selected_year, 12, 31)
         selection_label = str(selected_year)
@@ -1000,6 +1017,7 @@ with st.sidebar:
             value=(period_options[0].date(), period_options[-1].date()),
             min_value=period_options[0].date(),
             max_value=period_options[-1].date(),
+            key="reporting_range",
         )
         if isinstance(chosen_range, (tuple, list)) and len(chosen_range) == 2:
             selected_start, selected_end = map(pd.Timestamp, chosen_range)
@@ -1007,7 +1025,7 @@ with st.sidebar:
             selected_start = selected_end = pd.Timestamp(chosen_range)
         selection_label = f"{selected_start:%b %Y} – {selected_end:%b %Y}"
         title_prefix = "Custom Period"
-    selected_units = st.multiselect("Business units", unit_options, default=unit_options)
+    selected_units = st.multiselect("Business units", unit_options, default=unit_options, key="business_units")
     st.markdown(
         """
         <div class="sidebar-divider"></div>
@@ -1058,11 +1076,13 @@ for business_unit in selected_units:
         fallback_reviews.append({
             "business_unit": business_unit,
             "status": "Positive",
-            "label": "No alert",
-            "message": (
-                f"Revenue reached ${unit_metrics['revenue_actual']:.1f}M, "
-                f"{unit_metrics['revenue_vs_budget']:+.1%} versus target, with no configured alerts triggered."
-            ),
+            "insights": [{
+                "title": "Revenue on track",
+                "text": (
+                    f"Revenue reached ${unit_metrics['revenue_actual']:.1f}M, "
+                    f"{unit_metrics['revenue_vs_budget']:+.1%} versus target."
+                ),
+            }],
         })
     else:
         unit_alerts["rank"] = unit_alerts["severity"].map(severity_rank)
@@ -1074,8 +1094,7 @@ for business_unit in selected_units:
         fallback_reviews.append({
             "business_unit": business_unit,
             "status": severity_to_status.get(str(alert["severity"]), "Caution"),
-            "label": str(alert["rule"]),
-            "message": message,
+            "insights": [{"title": str(alert["rule"]), "text": message}],
         })
 
 period_review = generate_ai_period_review({
@@ -1124,14 +1143,18 @@ for business_unit in selected_units:
     review = review_by_unit[business_unit]
     has_alert = not current_alerts.loc[current_alerts["business_unit"].eq(business_unit)].empty
     if has_alert:
-        alert_message = str(review["message"]).rstrip().rstrip(".!?")
-        alert_title = f"{normalize_insight_label(review['label'])}: {alert_message}."
+        alert_items = [
+            "<div class='alert-insight'>"
+            f"<span class='alert-insight-title'>{escape(normalize_insight_label(insight['title']))}:</span> "
+            f"{format_insight_text_html(normalize_llm_sentence(insight['text']))}</div>"
+            for insight in review["insights"]
+        ]
         alert_status_class = status_css[review["status"]]
     else:
-        alert_title = "No alert."
+        alert_items = ["<div class='alert-insight'><span class='alert-insight-title'>No alert.</span></div>"]
         alert_status_class = "green"
     alert_rows = [
-        f"<div class='alert'><span class='alert-rule'>{escape(alert_title)}</span></div>"
+        f"<div class='alert'>{''.join(alert_items)}</div>"
     ]
     st.markdown(
         f"<div class='alert-group alert-group-{alert_status_class}'><div class='alert-business'>{escape(str(business_unit))}</div>"

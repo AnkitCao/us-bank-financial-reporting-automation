@@ -1,6 +1,7 @@
 issue_type,deterministic_repair_rule
-Column aliases,"Normalize case/spacing/punctuation, then map only approved source aliases to the canonical schema."
-Scenario labels,"Trim whitespace, collapse spaces and map approved labels to Actual, Budget, Forecast or Prior Year."
+Column aliases,Apply approved aliases; LLM reviews unfamiliar headers against an allowlist; reject unresolved required fields.
+Source structures,Classify headers and sample rows once; use only an approved parser route; quarantine new sources or unsupported structures.
+Scenario labels,Normalize known labels; LLM reviews unfamiliar spellings against the allowed scenarios; reject unresolved labels.
 Missing amounts,"Sort by month and linearly interpolate only within the same business, metric and scenario; fail if unresolved."
 Exact duplicates,Remove rows only when every standardized field and amount is identical.
 Conflicting keys,"Fail the pipeline when non-identical rows share business, month, scenario and metric."
