@@ -168,6 +168,7 @@ def normalize_llm_sentence(text: str) -> str:
     }
     for source_name, display_name in field_names.items():
         normalized = normalized.replace(source_name, display_name)
+    normalized = re.sub(r"(?<=\d)\s+(?:percentage\s+)?points?\b", "%", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"(?<![\w.])-?\d+\.\d{2,}(?!\w)", lambda match: f"{float(match.group()):.1f}", normalized)
     normalized = " ".join(normalized.split())
     normalized = re.sub(r"\s+([,:;.])", r"\1", normalized)
@@ -176,6 +177,24 @@ def normalize_llm_sentence(text: str) -> str:
     if normalized and normalized[-1] not in ".!?":
         normalized += "."
     return normalized
+
+
+def has_quantitative_evidence(text: str) -> bool:
+    """Require a measurable value, not merely a calendar year, in an LLM conclusion."""
+    patterns = (
+        r"\$\s*[+-]?\d",                         # money
+        r"[+-]?\d+(?:\.\d+)?\s*%",            # percentage or ratio
+        r"\b[+-]?\d+(?:\.\d+)?\s*(?:M|B)\b", # scaled amount
+        r"\b\d+(?:\.\d+)?\s+months?\b",      # numeric duration/count
+        r"\b[+-]?\d+\.\d+\b",                 # other decimal metric
+    )
+    return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
+
+
+def every_sentence_has_quantitative_evidence(text: str) -> bool:
+    """Ensure each generated conclusion sentence contains auditable numerical evidence."""
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+    return bool(sentences) and all(has_quantitative_evidence(sentence) for sentence in sentences)
 
 
 def normalize_insight_label(text: str) -> str:
@@ -205,9 +224,9 @@ def local_chart_summary(chart_key: str, values: dict) -> str:
     """Return a concise deterministic summary when an API key is unavailable."""
     if chart_key == "cost_to_income":
         gap = values["highest"] - values["lowest"]
-        return f"{values['highest_unit']} had the highest cost-to-income ratio ({values['highest']:.1f}%), {gap:.1f} points above {values['lowest_unit']}."
+        return f"{values['highest_unit']} had the highest cost-to-income ratio ({values['highest']:.1f}%), {gap:.1f}% above {values['lowest_unit']}."
     if chart_key == "profit_margin":
-        return f"{values['highest_unit']} led profit margins ({values['highest']:.1f}%), {values['variance']:+.1f} points versus target."
+        return f"{values['highest_unit']} led profit margins ({values['highest']:.1f}%), {values['variance']:+.1f}% versus target."
     if chart_key == "revenue_trend":
         return f"{values['unit']} revenue reached ${values['latest']:.1f}M, changing {values['change']:+.1f}% from the prior month."
     if chart_key == "revenue_variance":
@@ -224,11 +243,12 @@ def local_chart_summary(chart_key: str, values: dict) -> str:
 
 
 def enforce_chart_summary(text: str, fallback: str) -> str:
-    """Accept only one short chart sentence; otherwise use the concise fallback."""
+    """Accept only a short, quantitative chart sentence; otherwise use the fallback."""
     candidate = normalize_llm_sentence(text)
     words = re.findall(r"\b[\w$%+.']+(?:-[\w$%+.']+)*\b", candidate)
     sentence_marks = re.findall(r"[.!?]", candidate)
-    if candidate and len(words) <= 22 and len(candidate) <= 150 and len(sentence_marks) == 1:
+    has_numeric_evidence = every_sentence_has_quantitative_evidence(candidate)
+    if candidate and has_numeric_evidence and len(words) <= 22 and len(candidate) <= 150 and len(sentence_marks) == 1:
         return candidate
     return normalize_llm_sentence(fallback)
 
@@ -253,7 +273,11 @@ def generate_chart_summary(chart_key: str, summary_dict: dict) -> str:
                 "executive-friendly sentence with no label, quotation marks, explanation, heading, bullet, colon, or introductory phrase. The final "
                 "sentence must contain no more than 22 English words and no more than 150 characters including spaces. Mention each business unit "
                 "no more than once and normally mention only the most relevant unit unless comparison is essential. Include no more than two "
-                "numeric values. Prioritize the variance instead of repeating Actual, Budget, and Prior Year values. After naming a metric once, "
+                "numeric values. Every sentence must include at least one Arabic-numeral quantitative value from the supplied data, such as an "
+                "amount, percentage, ratio, variance, or month count. Express every percentage difference with the % symbol; never use point, "
+                "points, percentage point, or percentage points. Format every decimal to exactly one decimal place. Never return a qualitative "
+                "trend statement without a number. Prioritize "
+                "the variance instead of repeating Actual, Budget, and Prior Year values. After naming a metric once, "
                 "use concise phrases such as above budget, below budget, above May, or above prior year. Do not repeatedly write long names such "
                 "as Actual Revenue, Budget Revenue, Actual Operating Expense, or Budget Operating Expense. Compare levels, period changes, target "
                 "or budget gaps, and business differences only where material. "
@@ -294,8 +318,12 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive",'
                 '"label":"decision-oriented headline of no more than six words","message":"one or two concise factual sentences"}]}. '
                 "Select the two most decision-relevant period findings for the executive summary. Return exactly one review for each supplied "
-                "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. Preserve all "
-                "numbers and periods exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
+                "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
+                "Every executive-summary sentence and every business-review message must include at least one measurable Arabic-numeral value "
+                "from the supplied data, such as an amount, percentage, ratio, variance, or numeric month count. A calendar year alone does not "
+                "satisfy this requirement. Never return a qualitative conclusion without quantitative evidence. Express percentage differences "
+                "with the % symbol and never use point, points, percentage point, or percentage points. Preserve all numbers and periods "
+                "exactly; never invent thresholds, causes, or recommendations. Never mention, analyze, compare, or output "
                 "Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric name and value appear together, use Metric "
                 "Name (value), using natural adjective-first names such as Actual Revenue ($11.3M), Budget Revenue ($9.5M), Actual "
                 "Operating Expense ($4.0M), and Budget Operating Expense ($3.7M). Never write Revenue actual or Expense actual. Create a short, "
@@ -328,11 +356,11 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
             message = normalize_llm_sentence(str(item.get("message", "")))
             if "forecast" in label.lower():
                 continue
-            if label and message:
+            if label and message and every_sentence_has_quantitative_evidence(message):
                 reviews.append({"business_unit": unit, "status": status, "label": label, "message": message})
                 seen.add(unit)
         summary = normalize_llm_sentence(str(parsed.get("executive_summary", "")))
-        if not summary or seen != allowed_units:
+        if not summary or not every_sentence_has_quantitative_evidence(summary) or seen != allowed_units:
             return fallback
         return {"executive_summary": summary, "business_reviews": reviews}
     except Exception:
@@ -368,15 +396,15 @@ def base_layout(fig: go.Figure, title: str, subtitle: str) -> go.Figure:
 def add_chart_summary(fig: go.Figure, summary: str) -> go.Figure:
     """Add a visible conclusion as a dedicated third title line."""
     current_title = fig.layout.title.text or ""
-    # Plotly titles do not wrap automatically.  These charts render two per row,
-    # so wrap the conclusion to the usable card width before inserting it.
-    summary_lines = textwrap.wrap(summary, width=62, break_long_words=False, break_on_hyphens=False)
+    # Plotly titles do not wrap automatically. These charts render two per row;
+    # 72 characters lets one more short word fit while retaining a safe right margin.
+    summary_lines = textwrap.wrap(summary, width=72, break_long_words=False, break_on_hyphens=False)
     summary_html = "<br>".join(escape(line) for line in summary_lines[:3])
     title_margin = 198 + max(0, len(summary_lines[:3]) - 1) * 34
     fig.update_layout(
         title_text=(
             f"{current_title}<br>"
-            f"<span style='font-size:21px;color:#334155'><b>★</b> {summary_html}</span>"
+            f"<span style='font-size:25px;color:#334155'><b>★</b> {summary_html}</span>"
         ),
         margin=dict(t=title_margin),
     )
@@ -516,7 +544,7 @@ def single_ratio_trend_chart(frame: pd.DataFrame, column: str, title: str, subti
     fig = go.Figure(go.Scatter(
         x=frame["period"].dt.strftime("%b %Y"), y=frame[column], name=title, mode="lines+markers",
         line=dict(color="#2563EB", width=4), marker=dict(size=11),
-        hovertemplate="<b>%{fullData.name}</b><br>%{x}<br>Y: %{y:.2%}<extra></extra>",
+        hovertemplate="<b>%{fullData.name}</b><br>%{x}<br>Y: %{y:.1%}<extra></extra>",
     ))
     if threshold is not None:
         fig.add_hline(
@@ -587,7 +615,7 @@ def waterfall_chart(detail: pd.DataFrame, period_label: str) -> go.Figure:
     net_change = actual - budget
     net_color = "#2563EB" if net_change >= 0 else "#FF3B30"
     fig.add_annotation(
-        x=0.5, y=1.16, xref="paper", yref="paper", showarrow=False, align="center",
+        x=0.5, y=1.05, xref="paper", yref="paper", showarrow=False, align="center",
         text=(
             f"<span style='color:{net_color}'><b>Total Net Changes ${net_change:+.1f}M</b></span>"
             f" &nbsp;&nbsp; = &nbsp;&nbsp; <b>Actual ${actual:.1f}M</b>"
@@ -606,7 +634,7 @@ def waterfall_chart(detail: pd.DataFrame, period_label: str) -> go.Figure:
     else:
         x_range = [-max_abs * 1.25, max_abs * 1.25]
     fig.update_xaxes(title="Contribution to Revenue Variance ($M)", range=x_range, zeroline=False)
-    fig.update_yaxes(title="", tickfont=dict(size=19), automargin=True)
+    fig.update_yaxes(title="", tickfont=dict(size=19), ticklabelstandoff=28, automargin=True)
     fig.update_layout(showlegend=False, bargap=0.38)
     return base_layout(fig, "Revenue Results vs. Targets", f"= Actual − Target, {period_label}")
 
@@ -770,7 +798,7 @@ def render_business_model_metrics(current: pd.DataFrame) -> None:
             specialized = [(
                 "NPL Ratios",
                 "= NPL Proxy ÷ CRE Loan Balance",
-                f"{row['npl_ratio_actual']:.2%}",
+                f"{row['npl_ratio_actual']:.1%}",
             )]
         else:
             specialized = [
@@ -841,15 +869,15 @@ st.markdown(
       .legend-item { display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
       .legend-dot { width:13px; height:13px; border-radius:50%; display:inline-block; }
       .dot-red { background:#FF3B30; } .dot-yellow { background:#F4B400; } .dot-green { background:#2563EB; }
-      .alert-group { display:grid; grid-template-columns:300px 1fr; min-height:92px; background:white; border:1px solid #DCE2F3; border-radius:11px; margin-bottom:12px; overflow:hidden; }
-      .alert-business { display:flex; align-items:center; justify-content:center; min-height:92px; padding:16px 20px; color:#001E79; background:#F1F4FA; text-align:center; font-size:1.5rem; font-weight:800; line-height:1.25; }
-      .alert-list { display:flex; flex-direction:column; min-width:0; min-height:92px; }
-      .alert { display:grid; grid-template-columns:190px 22px minmax(0,1fr); align-items:center; flex:1; border:0; border-bottom:1px solid #DCE2F3; border-radius:0; padding:16px 22px; margin:0; font-size:1.4rem; line-height:1.35; }
+      .alert-group { display:grid; grid-template-columns:325px 1fr; min-height:96px; background:white; border:1px solid #DCE2F3; border-left:8px solid var(--alert-color); border-radius:11px; margin-bottom:12px; overflow:hidden; }
+      .alert-group-red { --alert-color:#FF3B30; --alert-title:#C62828; }
+      .alert-group-yellow { --alert-color:#E5B400; --alert-title:#D99F00; }
+      .alert-group-green { --alert-color:#198754; --alert-title:#198754; }
+      .alert-business { display:flex; align-items:center; min-height:96px; padding:18px 22px; color:#001E79; background:#F1F4FA; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
+      .alert-list { display:flex; flex-direction:column; min-width:0; min-height:96px; }
+      .alert { display:flex; align-items:center; justify-content:flex-start; flex:1; border:0; border-bottom:1px solid #DCE2F3; border-radius:0; padding:14px 22px; margin:0; font-size:1.7rem; line-height:1.35; }
       .alert:last-child { border-bottom:0; }
-      .alert-red { border-left:7px solid #FF3B30; } .alert-yellow { border-left:7px solid #F4B400; } .alert-green { border-left:7px solid #2563EB; }
-      .alert-rule { color:#001E79; font-weight:800; line-height:1.25; }
-      .alert-colon { color:#334155; font-weight:700; text-align:center; }
-      .alert-message { min-width:0; color:#17253A; }
+      .alert-rule { color:var(--alert-title); font-weight:800; line-height:1.35; }
       .score-wrap { overflow-x:auto; background:white; border-radius:10px; border:1px solid #DCE2F3; }
       .scorecard { width:100%; min-width:1200px; border-collapse:collapse; margin:0 !important; font-size:1.45rem; }
       .scorecard th { background:#001E79; color:white; border:2px solid white; padding:16px; text-align:center; font-size:1.5rem; }
@@ -922,7 +950,7 @@ st.markdown(
       [data-testid="stExpander"] details, [data-testid="stExpander"] summary { overflow:visible !important; }
       [data-testid="stExpander"] summary { padding-top:.75rem !important; padding-bottom:.75rem !important; }
       [data-testid="stExpander"] summary p { font-size:2.35rem !important; font-weight:800 !important; color:#0B2E6F !important; line-height:1.2 !important; }
-      @media (max-width:1100px) { .alert-group { grid-template-columns:220px 1fr; } }
+      @media (max-width:1100px) { .alert-group { grid-template-columns:250px 1fr; } }
       @media (max-width:700px) {
         .brand-row { align-items:flex-start; flex-direction:column; gap:12px; }
         .brand-logo { width:190px; }
@@ -1026,11 +1054,15 @@ fallback_reviews = []
 for business_unit in selected_units:
     unit_alerts = current_alerts.loc[current_alerts["business_unit"].eq(business_unit)].copy()
     if unit_alerts.empty:
+        unit_metrics = current.loc[current["business_unit"].eq(business_unit)].iloc[0]
         fallback_reviews.append({
             "business_unit": business_unit,
             "status": "Positive",
-            "label": "No exceptions",
-            "message": "No configured alerts were triggered in the selected period.",
+            "label": "No alert",
+            "message": (
+                f"Revenue reached ${unit_metrics['revenue_actual']:.1f}M, "
+                f"{unit_metrics['revenue_vs_budget']:+.1%} versus target, with no configured alerts triggered."
+            ),
         })
     else:
         unit_alerts["rank"] = unit_alerts["severity"].map(severity_rank)
@@ -1090,13 +1122,19 @@ review_by_unit = {item["business_unit"]: item for item in period_review["busines
 status_css = {"Critical": "red", "Caution": "yellow", "Positive": "green"}
 for business_unit in selected_units:
     review = review_by_unit[business_unit]
+    has_alert = not current_alerts.loc[current_alerts["business_unit"].eq(business_unit)].empty
+    if has_alert:
+        alert_message = str(review["message"]).rstrip().rstrip(".!?")
+        alert_title = f"{normalize_insight_label(review['label'])}: {alert_message}."
+        alert_status_class = status_css[review["status"]]
+    else:
+        alert_title = "No alert."
+        alert_status_class = "green"
     alert_rows = [
-        f"<div class='alert alert-{status_css[review['status']]}'><span class='alert-rule'>"
-        f"{escape(normalize_insight_label(review['label']))}</span><span class='alert-colon'>:</span>"
-        f"<span class='alert-message'>{escape(review['message'])}</span></div>"
+        f"<div class='alert'><span class='alert-rule'>{escape(alert_title)}</span></div>"
     ]
     st.markdown(
-        f"<div class='alert-group'><div class='alert-business'>{escape(str(business_unit))}</div>"
+        f"<div class='alert-group alert-group-{alert_status_class}'><div class='alert-business'>{escape(str(business_unit))}</div>"
         f"<div class='alert-list'>{''.join(alert_rows)}</div></div>",
         unsafe_allow_html=True,
     )
@@ -1108,7 +1146,10 @@ st.markdown("<div id='business-model-metrics' class='section-anchor'></div>", un
 st.subheader("Defined Metrics")
 render_business_model_metrics(current)
 
-trend_start = selected_end - pd.DateOffset(months=5) if time_mode == "Month" else selected_start
+# Trend visuals always show a consistent rolling 12-month history ending at the
+# selected period. All non-trend visuals below continue to use selected_start.
+available_start = pd.Timestamp(kpis["period"].min())
+trend_start = max(available_start, selected_end - pd.DateOffset(months=11))
 trend_data = kpis.loc[kpis["period"].between(trend_start, selected_end) & kpis["business_unit"].isin(selected_units)]
 selected_detail = detail.loc[detail["period"].between(selected_start, selected_end) & detail["business_unit"].isin(selected_units)]
 trend_detail = detail.loc[detail["period"].between(trend_start, selected_end) & detail["business_unit"].isin(selected_units)]
@@ -1188,8 +1229,8 @@ with st.expander("Key Business Metrics", expanded=True):
             values = cre["npl_ratio_actual"].dropna()
             summary_text = generate_chart_summary("npl_ratio", attach_evidence({
                 "_version": 5,
-                "business_unit": "Commercial Real Estate", "latest": round(float(values.iloc[-1] * 100), 2),
-                "prior": round(float(values.iloc[-2] * 100), 2) if len(values) > 1 else round(float(values.iloc[-1] * 100), 2),
+                "business_unit": "Commercial Real Estate", "latest": round(float(values.iloc[-1] * 100), 1),
+                "prior": round(float(values.iloc[-2] * 100), 1) if len(values) > 1 else round(float(values.iloc[-1] * 100), 1),
                 "months": int(len(values)),
             }, [row for row in raw_trend_evidence if row.get("Business Unit") == "Commercial Real Estate"],
                 trend_detail.loc[trend_detail["business_unit"] == "Commercial Real Estate"]))
