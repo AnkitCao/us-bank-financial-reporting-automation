@@ -240,6 +240,36 @@ def normalize_llm_sentence(text: str) -> str:
     return normalized
 
 
+def polish_dashboard_narrative(text: str) -> str:
+    """Apply final display terminology regardless of LLM, cache, or fallback origin."""
+    polished = str(text)
+    replacements = {
+        "Actual Revenue": "revenue",
+        "Target Revenue": "revenue target",
+        "Budget Revenue": "revenue target",
+        "Actual Adjusted Profit": "adjusted profit",
+        "Target Adjusted Profit": "adjusted profit target",
+        "Budget Adjusted Profit": "adjusted profit target",
+        "Actual Operating Expense": "operating expenses",
+        "Budget Operating Expense": "operating expense budget",
+        "Actual Credit Provision": "credit provision",
+        "Commercial Mortgage Balance": "mortgage portfolio",
+        "Nonperforming Loan Proxy": "NPL proxy",
+        "CRE Loan Balance": "CRE loan portfolio",
+        "Target Loan Balance": "loan target",
+        "Budget Loan Balance": "loan target",
+        "Target Deposit Balance": "deposit target",
+        "Budget Deposit Balance": "deposit target",
+        "Loan Balance": "loans",
+        "Deposit Balance": "deposits",
+    }
+    for source_name, display_name in replacements.items():
+        polished = re.sub(re.escape(source_name), display_name, polished, flags=re.IGNORECASE)
+    polished = re.sub(r"\btarget\b", "target", polished, flags=re.IGNORECASE)
+    polished = re.sub(r"\bbudget\b", "budget", polished, flags=re.IGNORECASE)
+    return " ".join(polished.split())
+
+
 def has_quantitative_evidence(text: str) -> bool:
     """Require a measurable value, not merely a calendar year, in an LLM conclusion."""
     patterns = (
@@ -1294,7 +1324,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 9,
+    "version": 10,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
@@ -1304,7 +1334,7 @@ period_review = generate_ai_period_review({
     "calculated_metric_records": dataframe_records(period_calculation_evidence),
     "deterministic_rule_alerts": dataframe_records(current_alerts),
 }, summary_fallback, fallback_reviews)
-summary = period_review["executive_summary"]
+summary = polish_dashboard_narrative(period_review["executive_summary"])
 summary_lines = [line.strip() for line in re.split(r"(?<=[.!?])\s+", summary) if line.strip()]
 summary_html = "".join(f"<span class='summary-line'>{escape(line)}</span>" for line in summary_lines)
 st.markdown(
@@ -1343,7 +1373,7 @@ for business_unit in selected_units:
             "<div class='alert-insight'>"
             "<span class='alert-insight-copy'>"
             f"<span class='alert-insight-title'>{escape(normalize_insight_label(insight['title']))}:</span> "
-            f"{format_insight_text_html(normalize_llm_sentence(insight['text']))}</span></div>"
+            f"{format_insight_text_html(polish_dashboard_narrative(normalize_llm_sentence(insight['text'])))}</span></div>"
             for insight in review["insights"]
         ]
         alert_status_class = status_css[review["status"]]
