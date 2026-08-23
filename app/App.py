@@ -1071,7 +1071,7 @@ st.markdown(
         width:365px !important;
         min-width:365px !important;
         max-width:365px !important;
-        margin-left:-42px !important;
+        margin-left:-20px !important;
         overflow:visible !important;
       }
       [data-baseweb="popover"]:has([role="option"]) > div,
@@ -1087,6 +1087,9 @@ st.markdown(
         font-family:"Times New Roman", Times, serif !important;
         font-size:1rem !important;
         line-height:1.25 !important;
+        color:#0B1F3A !important;
+        -webkit-text-fill-color:#0B1F3A !important;
+        opacity:1 !important;
         visibility:visible !important;
       }
       [data-baseweb="popover"] [role="option"] {
