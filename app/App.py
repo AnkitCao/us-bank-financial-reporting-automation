@@ -1469,6 +1469,7 @@ overall_performance = {
     "expense_variance": float(total_expense / total_expense_budget - 1),
 }
 current_alerts = alerts.loc[alerts["period"].between(selected_start, selected_end) & alerts["business_unit"].isin(selected_units)]
+raw_period_evidence = load_raw_source_evidence(selected_start, selected_end, tuple(selected_units))
 period_calculation_evidence = detail.loc[
     detail["period"].between(selected_start, selected_end) & detail["business_unit"].isin(selected_units)
 ]
