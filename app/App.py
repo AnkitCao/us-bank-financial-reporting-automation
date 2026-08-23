@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from difflib import SequenceMatcher
 import json
 import re
 import sys
@@ -307,6 +308,37 @@ def every_sentence_has_quantitative_evidence(text: str) -> bool:
     return bool(sentences) and all(has_quantitative_evidence(sentence) for sentence in sentences)
 
 
+def narrative_structure(text: str) -> str:
+    """Normalize facts away so repeated executive-summary sentence templates are detectable."""
+    normalized = text.lower()
+    for unit in BUSINESS_UNIT_ORDER:
+        normalized = normalized.replace(unit.lower(), " business ")
+    normalized = re.sub(r"\$?[+-]?\d[\d,]*(?:\.\d+)?%?[mb]?", " number ", normalized)
+    normalized = re.sub(
+        r"\b(?:adjusted profit|operating expenses?|expenses?|revenue|loans?|loan-to-deposit ratio|"
+        r"mortgage (?:portfolio|balance)|npl (?:ratio|proxy)|profit margin|cost-to-income ratio|deposits?|fee mix)\b",
+        " metric ",
+        normalized,
+    )
+    normalized = re.sub(r"\b(?:was|were|reached|totaled|delivered|generated|posted|rose|fell|increased|decreased)\b", " verb ", normalized)
+    return " ".join(re.findall(r"[a-z]+", normalized))
+
+
+def has_repetitive_department_structure(lines: list[str], threshold: float = 0.76) -> bool:
+    """Flag any pair of department lines that uses substantially the same narrative frame."""
+    structures = [narrative_structure(line) for line in lines]
+    return any(
+        SequenceMatcher(None, structures[left], structures[right]).ratio() >= threshold
+        for left in range(len(structures))
+        for right in range(left + 1, len(structures))
+    )
+
+
+def narrative_numbers(text: str) -> list[str]:
+    """Return displayed numeric tokens so a style rewrite cannot alter evidence."""
+    return re.findall(r"\$?[+-]?\d[\d,]*(?:\.\d+)?%?[MB]?", text)
+
+
 def normalize_insight_label(text: str) -> str:
     """Keep insight headings short and visually consistent."""
     cleaned = re.sub(r"&#x?20;|&nbsp;", " ", str(text), flags=re.IGNORECASE)
@@ -391,6 +423,10 @@ def department_performance_sentence(row: pd.Series) -> str:
     selected = sorted(candidates, key=lambda item: item[0], reverse=True)[:2]
     if len(selected) == 1:
         return f"{unit} {selected[0][2]}."
+    if unit == "Commercial Banking":
+        return f"Commercial Banking {selected[0][2]}; meanwhile, {selected[1][2]}."
+    if unit == "Commercial Real Estate":
+        return f"Commercial Real Estate {selected[0][2]}, alongside {selected[1][2]}."
     return f"{unit} {selected[0][2]}; {selected[1][2]}."
 
 
@@ -618,6 +654,45 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
             ):
                 generated_line = fallback_line
             department_lines.append(generated_line)
+        if has_repetitive_department_structure(department_lines):
+            rewrite_response = client.responses.create(
+                model=st.secrets.get("OPENAI_MODEL", "gpt-5-mini"),
+                instructions=(
+                    "Rewrite the supplied department_lines to remove repeated sentence templates. Return JSON only as "
+                    '{"department_lines":["line 1","line 2","line 3"]}. Preserve each line\'s business unit, facts, numeric '
+                    "tokens, meaning, and order exactly. Do not add, remove, recalculate, or move any number between lines. "
+                    "Use a genuinely different rhetorical structure for every line: vary the lead, clause order, comparison form, "
+                    "and connective. Do not reuse the same subject-verb-comparison frame, and do not begin multiple findings with "
+                    "a metric followed by reached, was, or totaled. Each line must remain one complete sentence of no more than "
+                    "32 words, begin with its supplied business-unit name, contain no em dash or en dash, and end with a period."
+                ),
+                input=json.dumps({"department_lines": department_lines}),
+                store=False,
+            )
+            rewritten_payload = json.loads(
+                rewrite_response.output_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            )
+            rewritten_lines = [normalize_llm_sentence(str(line)) for line in rewritten_payload.get("department_lines", [])]
+            rewrite_is_valid = len(rewritten_lines) == len(department_lines)
+            if rewrite_is_valid:
+                for unit, original, rewritten in zip(facts["selected_business_units"], department_lines, rewritten_lines):
+                    word_count = len(re.findall(r"\b[\w$%+.']+(?:-[\w$%+.']+)*\b", rewritten))
+                    if (
+                        not rewritten.startswith(unit)
+                        or narrative_numbers(rewritten) != narrative_numbers(original)
+                        or not every_sentence_has_quantitative_evidence(rewritten)
+                        or not conclusion_verbs.search(rewritten)
+                        or word_count > 32
+                    ):
+                        rewrite_is_valid = False
+                        break
+            if rewrite_is_valid and not has_repetitive_department_structure(rewritten_lines):
+                department_lines = rewritten_lines
+            else:
+                department_lines = [
+                    facts["department_summary_fallbacks"][unit]
+                    for unit in facts["selected_business_units"]
+                ]
         summary = " ".join([canonical_first_sentence, *department_lines])
         return {"executive_summary": summary, "business_reviews": reviews}
     except Exception:
@@ -1414,7 +1489,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 12,
+    "version": 13,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
