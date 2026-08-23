@@ -221,6 +221,18 @@ def fmt_money(value: float) -> str:
     return f"${value:,.1f}M"
 
 
+def overall_performance_sentence(overall: dict) -> str:
+    """Build the mandatory first executive-summary sentence from shared KPI totals."""
+    revenue_direction = "above target" if overall["revenue_variance"] >= 0 else "below target"
+    expense_direction = "above budget" if overall["expense_variance"] >= 0 else "below budget"
+    subject = "the three businesses" if overall["business_unit_count"] == 3 else "the selected businesses"
+    return (
+        f"Overall, {subject} generated {fmt_money(overall['revenue_actual'])} in revenue, "
+        f"{abs(overall['revenue_variance']):.1%} {revenue_direction}, while operating expenses totaled "
+        f"{fmt_money(overall['operating_expense_actual'])}, {abs(overall['expense_variance']):.1%} {expense_direction}."
+    )
+
+
 def format_chart_period_range(frame: pd.DataFrame) -> str:
     """Return a concise month or month range for chart subtitles."""
     periods = pd.to_datetime(frame["period"], errors="coerce").dropna()
@@ -326,10 +338,16 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "metric record, and deterministic rule alert. Decide what is genuinely most material for this period; do not always choose the "
                 "same metrics or reuse a fixed template. Consider target gaps, expense pressure, trend reversals, margin, cost-to-income, NPL, "
                 "loan-to-deposit, fee concentration, and alert persistence. Return JSON only with: "
-                '{"executive_summary":"exactly two short factual sentences","business_reviews":['
+                '{"executive_summary":"two or three short factual sentences","business_reviews":['
                 '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive","insights":['
                 '{"title":"plain-text headline of no more than four words","text":"one quantitative factual sentence"}]}]}. '
-                "Select the two most decision-relevant period findings for the executive summary. Return exactly one review for each supplied "
+                "The first executive-summary sentence must begin with Overall, and quantify the combined performance of all supplied business "
+                "units. It must include exactly four overall figures from overall_performance: combined actual revenue; revenue variance versus "
+                "target as a percentage; combined actual operating expense; and operating-expense variance versus budget as a percentage. Use "
+                "this exact structure with supplied values: Overall, the three businesses generated $31.5M in revenue, 6.9% above target, while "
+                "operating expenses totaled $10.4M, 4.2% above budget. Replace every example value with overall_performance values. Use below "
+                "target or below budget for negative variances. Never add another number to the first sentence. Never describe overall performance "
+                "without these four figures. Select the remaining one or two most decision-relevant period findings. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
                 "Return one or two insights per business unit. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
                 "from the supplied data, such as an amount, percentage, ratio, variance, or numeric month count. A calendar year alone does not "
@@ -376,6 +394,13 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
         summary = normalize_llm_sentence(str(parsed.get("executive_summary", "")))
         if not summary or not every_sentence_has_quantitative_evidence(summary) or seen != allowed_units:
             return fallback
+        remaining_sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", summary)
+            if sentence.strip()
+        ][1:3]
+        canonical_first_sentence = overall_performance_sentence(facts["overall_performance"])
+        summary = " ".join([canonical_first_sentence, *remaining_sentences])
         return {"executive_summary": summary, "business_reviews": reviews}
     except Exception:
         return fallback
@@ -887,10 +912,11 @@ st.markdown(
       .alert-group-red { --alert-color:#FF3B30; --alert-title:#C62828; }
       .alert-group-yellow { --alert-color:#E5B400; --alert-title:#D99F00; }
       .alert-group-green { --alert-color:#198754; --alert-title:#198754; }
-      .alert-business { display:flex; align-items:center; min-height:70px; padding:14px 22px; color:#001E79; background:#F1F4FA; border:1px solid #DCE2F3; border-left:0; border-radius:0 10px 10px 0; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
+      .alert-business { display:flex; align-items:center; min-height:96px; padding:14px 22px; color:#001E79; background:#F1F4FA; border:1px solid #DCE2F3; border-left:0; border-radius:0 10px 10px 0; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
       .alert-list { display:flex; flex-direction:column; min-width:0; }
       .alert { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:10px; flex:1; border:0; padding:0; margin:0; font-size:1.55rem; line-height:1.35; }
-      .alert-insight { display:flex; align-items:center; flex:1 1 70px; min-height:70px; color:#334155; background:#FFFFFF; border:1px solid #DCE2F3; border-radius:10px; padding:14px 18px; font-weight:400; }
+      .alert-insight { display:flex; align-items:center; flex:1 1 96px; min-height:96px; color:#334155; background:#FFFFFF; border:1px solid #DCE2F3; border-radius:10px; padding:14px 18px; font-weight:400; }
+      .alert-insight-copy { display:inline; }
       .alert-insight-title { color:var(--alert-title); font-weight:800; }
       .alert-insight strong { color:inherit; font-weight:800; }
       .score-wrap { overflow-x:auto; background:white; border-radius:10px; border:1px solid #DCE2F3; }
@@ -1047,6 +1073,18 @@ if not selected_units:
 
 period_kpis = kpis.loc[kpis["period"].between(selected_start, selected_end) & kpis["business_unit"].isin(selected_units)]
 current = aggregate_kpis(period_kpis)
+total_revenue = current["revenue_actual"].sum()
+total_budget = current["revenue_budget"].sum()
+total_profit = current["adjusted_profit_actual"].sum()
+total_expense = current["operating_expense_actual"].sum()
+total_expense_budget = current["operating_expense_budget"].sum()
+overall_performance = {
+    "business_unit_count": len(selected_units),
+    "revenue_actual": float(total_revenue),
+    "revenue_variance": float(total_revenue / total_budget - 1),
+    "operating_expense_actual": float(total_expense),
+    "expense_variance": float(total_expense / total_expense_budget - 1),
+}
 current_alerts = alerts.loc[alerts["period"].between(selected_start, selected_end) & alerts["business_unit"].isin(selected_units)]
 raw_period_evidence = load_raw_source_evidence(selected_start, selected_end, tuple(selected_units))
 period_calculation_evidence = detail.loc[
@@ -1064,7 +1102,8 @@ st.markdown(
 )
 st.title(f"Automated Three-Business Performance Dashboard – {selection_label}")
 
-summary_fallback, attention_items = generate_executive_summary(period_kpis, current_alerts, selection_label)
+summary_detail_fallback, attention_items = generate_executive_summary(period_kpis, current_alerts, selection_label)
+summary_fallback = f"{overall_performance_sentence(overall_performance)} {summary_detail_fallback}"
 severity_to_status = {"Red": "Critical", "Yellow": "Caution", "Green": "Positive"}
 severity_rank = {"Red": 0, "Yellow": 1, "Green": 2}
 fallback_reviews = []
@@ -1100,6 +1139,7 @@ period_review = generate_ai_period_review({
     "version": 5,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
+    "overall_performance": overall_performance,
     "raw_source_records": raw_period_evidence,
     "clean_monthly_kpis": dataframe_records(period_kpis),
     "calculated_metric_records": dataframe_records(period_calculation_evidence),
@@ -1112,15 +1152,11 @@ st.markdown(
 )
 st.markdown("<div class='kpi-spacer'></div>", unsafe_allow_html=True)
 
-total_revenue = current["revenue_actual"].sum()
-total_budget = current["revenue_budget"].sum()
-total_profit = current["adjusted_profit_actual"].sum()
-total_expense = current["operating_expense_actual"].sum()
 cards = st.columns(4, gap="medium")
-cards[0].metric("Revenues", fmt_money(total_revenue), f"{(total_revenue / total_budget - 1):+.1%} vs. target")
+cards[0].metric("Revenues", fmt_money(total_revenue), f"{overall_performance['revenue_variance']:+.1%} vs. target")
 cards[1].metric("Adjusted Profits", fmt_money(total_profit), f"{(total_profit / current['adjusted_profit_budget'].sum() - 1):+.1%} vs. target")
-cards[2].metric("Operating Expenses", fmt_money(total_expense), f"{(total_expense / current['operating_expense_budget'].sum() - 1):+.1%} vs. budget", delta_color="inverse")
-cards[3].metric("Targets Achieved", f"{total_revenue / total_budget:.1%}")
+cards[2].metric("Operating Expenses", fmt_money(total_expense), f"{overall_performance['expense_variance']:+.1%} vs. budget", delta_color="inverse")
+cards[3].metric("Targets Achieved", f"{1 + overall_performance['revenue_variance']:.1%}")
 
 st.markdown("<div id='attention' class='section-anchor'></div>", unsafe_allow_html=True)
 st.markdown(
@@ -1144,8 +1180,9 @@ for business_unit in selected_units:
     if has_alert:
         alert_items = [
             "<div class='alert-insight'>"
+            "<span class='alert-insight-copy'>"
             f"<span class='alert-insight-title'>{escape(normalize_insight_label(insight['title']))}:</span> "
-            f"{format_insight_text_html(normalize_llm_sentence(insight['text']))}</div>"
+            f"{format_insight_text_html(normalize_llm_sentence(insight['text']))}</span></div>"
             for insight in review["insights"]
         ]
         alert_status_class = status_css[review["status"]]
