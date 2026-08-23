@@ -357,10 +357,14 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "$10.4M, 4.2% above budget. Replace every example value with overall_performance values. Use below "
                 "target or below budget for negative variances. Never add another number to the first sentence. Never describe overall performance "
                 "without these four figures. After the Overall sentence, write exactly one separate sentence for each supplied business unit, in "
-                "the supplied order. Each department sentence must start with its business-unit name and use that unit's aggregated values for the "
-                "entire selected reporting period, never a single month inside a quarter or year. State aggregated revenue and its percentage variance "
-                "versus target as one complete factual sentence. Use no more than 18 words and two numeric values. Avoid repetitive phrases such as "
-                "Actual Revenue and Budget Revenue when revenue and its variance communicate the same fact. Return exactly one review for each supplied "
+                "the supplied order. For each department, evaluate every metric and every change inside the selected reporting period, including "
+                "revenue, expense, profit, margin, cost-to-income, loans, deposits, NPL, fee mix, target or budget variance, and time trend. Independently "
+                "choose the one or two findings that are most material and worthy of executive attention; do not default to revenue or expense. Combine "
+                "those findings into one complete sentence that starts with the business-unit name, uses only figures supported by the selected-period "
+                "records, contains no more than 32 words and four numeric values, and states a clear comparison, change, high, low, or exception rather "
+                "than merely listing metric names and values. A month-specific finding is allowed inside a quarter or year only when it explains a "
+                "material change within that selected period. Avoid repetitive phrases such as Actual Revenue and Budget Revenue when revenue and its "
+                "variance communicate the same fact. Return exactly one review for each supplied "
                 "business unit. If a unit has no material concern, use Positive and state its most useful favorable or stable fact. "
                 "Return one or two insights per business unit. Every executive-summary sentence and every insight text must include at least one measurable Arabic-numeral value "
                 "from the supplied data, such as an amount, percentage, ratio, variance, or numeric month count. A calendar year alone does not "
@@ -414,14 +418,23 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
         ][1:]
         canonical_first_sentence = overall_performance_sentence(facts["overall_performance"])
         department_lines = []
+        conclusion_verbs = re.compile(
+            r"\b(?:was|were|is|are|had|reached|exceeded|beat|grew|rose|increased|declined|fell|decreased|"
+            r"improved|deteriorated|led|lagged|recorded|delivered|generated|posted|remained|moved)\b",
+            re.IGNORECASE,
+        )
         for unit in facts["selected_business_units"]:
             fallback_line = facts["department_summary_fallbacks"][unit]
             generated_line = next(
                 (sentence for sentence in generated_sentences if sentence.startswith(unit)),
                 fallback_line,
             )
-            required_values = re.findall(r"\$\d+(?:\.\d+)?M|\d+(?:\.\d+)?%", fallback_line)
-            if not all(value in generated_line for value in required_values):
+            word_count = len(re.findall(r"\b[\w$%+.']+(?:-[\w$%+.']+)*\b", generated_line))
+            if (
+                not every_sentence_has_quantitative_evidence(generated_line)
+                or not conclusion_verbs.search(generated_line)
+                or word_count > 32
+            ):
                 generated_line = fallback_line
             department_lines.append(generated_line)
         summary = " ".join([canonical_first_sentence, *department_lines])
@@ -1171,7 +1184,7 @@ for business_unit in selected_units:
         })
 
 period_review = generate_ai_period_review({
-    "version": 5,
+    "version": 6,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
@@ -1185,7 +1198,7 @@ summary = period_review["executive_summary"]
 summary_lines = [line.strip() for line in re.split(r"(?<=[.!?])\s+", summary) if line.strip()]
 summary_html = "".join(f"<span class='summary-line'>{escape(line)}</span>" for line in summary_lines)
 st.markdown(
-    f"<div class='brief'><strong>AI Executive Summary</strong><span class='summary-text'>{summary_html}</span></div>",
+    f"<div class='brief'><strong>AI Executive Summary:</strong><span class='summary-text'>{summary_html}</span></div>",
     unsafe_allow_html=True,
 )
 st.markdown("<div class='kpi-spacer'></div>", unsafe_allow_html=True)
