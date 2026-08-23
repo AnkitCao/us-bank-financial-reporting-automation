@@ -1143,7 +1143,6 @@ st.markdown(
         width:365px !important;
         min-width:365px !important;
         max-width:365px !important;
-        margin-left:-20px !important;
         overflow:visible !important;
       }
       [data-baseweb="popover"]:has([role="option"]) > div,
@@ -1210,6 +1209,61 @@ st.markdown(
     </style>
     """,
     unsafe_allow_html=True,
+)
+
+# BaseWeb renders select menus through a body-level portal, outside the scaled
+# .stApp coordinate system. Align each open menu to its own visible combobox
+# instead of applying one hard-coded offset to Month, Quarter, and Year.
+components.html(
+    """
+    <script>
+      (() => {
+        const doc = window.parent.document;
+        const visible = (node) => node && node.getClientRects().length && getComputedStyle(node).display !== "none";
+
+        const alignOpenSelect = () => {
+          const combo = [...doc.querySelectorAll('[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]')]
+            .find(visible);
+          const popover = [...doc.querySelectorAll('[data-baseweb="popover"]')]
+            .filter(node => visible(node) && node.querySelector('[role="option"]'))
+            .at(-1);
+          if (!combo || !popover) return;
+
+          const anchor = combo.closest('[data-baseweb="select"]') || combo;
+          const anchorRect = anchor.getBoundingClientRect();
+          const width = `${Math.round(anchorRect.width)}px`;
+          popover.style.setProperty('margin-left', '0px', 'important');
+          popover.style.setProperty('width', width, 'important');
+          popover.style.setProperty('min-width', width, 'important');
+          popover.style.setProperty('max-width', width, 'important');
+          popover.querySelectorAll(':scope > div, [data-baseweb="menu"], [role="listbox"]')
+            .forEach(node => {
+              node.style.setProperty('width', width, 'important');
+              node.style.setProperty('min-width', width, 'important');
+              node.style.setProperty('max-width', width, 'important');
+            });
+
+          requestAnimationFrame(() => {
+            const popoverRect = popover.getBoundingClientRect();
+            const correction = anchorRect.left - popoverRect.left;
+            popover.style.setProperty('margin-left', `${correction}px`, 'important');
+          });
+        };
+
+        const scheduleAlignment = () => requestAnimationFrame(() => requestAnimationFrame(alignOpenSelect));
+        new MutationObserver(scheduleAlignment).observe(doc.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['aria-expanded'],
+        });
+        doc.addEventListener('click', scheduleAlignment, true);
+        window.addEventListener('resize', scheduleAlignment);
+      })();
+    </script>
+    """,
+    height=0,
+    width=0,
 )
 
 try:
