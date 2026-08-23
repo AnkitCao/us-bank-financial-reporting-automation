@@ -890,7 +890,7 @@ st.markdown(
       .alert-business { display:flex; align-items:center; min-height:70px; padding:14px 22px; color:#001E79; background:#F1F4FA; border:1px solid #DCE2F3; border-left:0; border-radius:0 10px 10px 0; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
       .alert-list { display:flex; flex-direction:column; min-width:0; }
       .alert { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:10px; flex:1; border:0; padding:0; margin:0; font-size:1.55rem; line-height:1.35; }
-      .alert-insight { display:flex; align-items:center; min-height:70px; color:#334155; background:#FFFFFF; border:1px solid #DCE2F3; border-radius:10px; padding:14px 18px; font-weight:400; }
+      .alert-insight { display:flex; align-items:center; flex:1 1 70px; min-height:70px; color:#334155; background:#FFFFFF; border:1px solid #DCE2F3; border-radius:10px; padding:14px 18px; font-weight:400; }
       .alert-insight-title { color:var(--alert-title); font-weight:800; }
       .alert-insight strong { color:inherit; font-weight:800; }
       .score-wrap { overflow-x:auto; background:white; border-radius:10px; border:1px solid #DCE2F3; }
