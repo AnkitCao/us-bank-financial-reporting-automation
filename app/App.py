@@ -270,6 +270,25 @@ def polish_dashboard_narrative(text: str) -> str:
     return " ".join(polished.split())
 
 
+def insight_display_status(insight: dict) -> str:
+    """Enforce intuitive per-insight color semantics for common financial outcomes."""
+    text = f"{insight.get('title', '')} {insight.get('text', '')}".lower()
+    unfavorable_patterns = (
+        r"(?:expense|cost|credit provision).{0,45}(?:above|over|exceed(?:ed|ing)?)\s+(?:the\s+)?budget",
+        r"(?:below target|revenue decline|profit decline|margin decline|npl increase|npl rose|deteriorat)",
+    )
+    favorable_patterns = (
+        r"(?:above|over|exceed(?:ed|ing)?|beat|beating)\s+(?:the\s+)?target",
+        r"(?:outperformance|revenue spike|revenue growth|profit growth|margin improvement|no alert)",
+    )
+    if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in unfavorable_patterns):
+        return "Critical"
+    if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in favorable_patterns):
+        return "Positive"
+    status = str(insight.get("status", "Caution"))
+    return status if status in {"Critical", "Caution", "Positive"} else "Caution"
+
+
 def has_quantitative_evidence(text: str) -> bool:
     """Require a measurable value, not merely a calendar year, in an LLM conclusion."""
     patterns = (
@@ -451,7 +470,8 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "loan-to-deposit, fee concentration, and alert persistence. Return JSON only with: "
                 '{"executive_summary":"one Overall sentence followed by one sentence per supplied business unit","business_reviews":['
                 '{"business_unit":"allowed supplied name","status":"Critical|Caution|Positive","insights":['
-                '{"title":"plain-text headline of no more than four words","text":"one quantitative factual sentence"}]}]}. '
+                '{"title":"plain-text headline of no more than four words","text":"one quantitative factual sentence",'
+                '"status":"Critical|Caution|Positive"}]}]}. '
                 "The first executive-summary sentence must begin with Overall, and quantify the combined performance of all supplied business "
                 "units. It must include exactly four overall figures from overall_performance: combined actual revenue; revenue variance versus "
                 "target as a percentage; combined actual operating expense; and operating-expense variance versus budget as a percentage. Use "
@@ -486,7 +506,10 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
                 "Prefer forms such as revenue reached $11.3M, loans exceeded target by $42.3M, the mortgage portfolio reached $2,108.0M, or operating "
                 "expenses exceeded budget by $0.3M. Use lowercase target and budget throughout narrative text. "
                 "Do not write labels such as Actual Revenue, Revenue actual, Actual Operating Expense, or Expense actual. Give every insight "
-                "its own short decision-oriented title. Return plain text only inside JSON: no HTML, Markdown, entities such as &#x20;, bullets, or "
+                "its own short decision-oriented title and independently classify each insight. Use Positive for favorable results, target "
+                "outperformance, or no alert; Critical for clear unfavorable results such as expense overruns, material deterioration, or breached "
+                "limits; and Caution only for a genuinely mixed or watch-level condition. Insights within the same business unit may have different "
+                "statuses. The business-level status must equal the most severe insight status. Return plain text only inside JSON: no HTML, Markdown, entities such as &#x20;, bullets, or "
                 "bold markup. Do not put a colon in title or text; the interface adds an English colon and all visual formatting. State the result first, "
                 "then the comparison. When Actual and Budget are available, calculate and state the variance, using natural language such as "
                 "Revenue reached $11.3M, exceeding target by $1.8M. Use above target or below target for non-cost metrics; reserve above budget, "
@@ -516,8 +539,13 @@ def generate_ai_period_review(facts: dict, fallback_summary: str, fallback_revie
             for insight in item.get("insights", []):
                 title = normalize_insight_label(str(insight.get("title", "")))
                 message = normalize_llm_sentence(str(insight.get("text", "")))
-                if title and message and "forecast" not in title.lower() and every_sentence_has_quantitative_evidence(message):
-                    insights.append({"title": title, "text": message})
+                insight_status = str(insight.get("status", status))
+                if (
+                    title and message and "forecast" not in title.lower()
+                    and every_sentence_has_quantitative_evidence(message)
+                    and insight_status in {"Critical", "Caution", "Positive"}
+                ):
+                    insights.append({"title": title, "text": message, "status": insight_status})
             if insights:
                 reviews.append({"business_unit": unit, "status": status, "insights": insights[:2]})
                 seen.add(unit)
@@ -1060,14 +1088,14 @@ st.markdown(
       .legend-item { display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
       .legend-dot { width:13px; height:13px; border-radius:50%; display:inline-block; }
       .dot-red { background:#FF3B30; } .dot-yellow { background:#F4B400; } .dot-green { background:#2563EB; }
-      .alert-group { display:grid; grid-template-columns:325px 1fr; column-gap:10px; background:transparent; border:0; border-left:8px solid var(--alert-color); border-radius:11px 0 0 11px; margin-bottom:12px; overflow:visible; }
-      .alert-group-red { --alert-color:#FF3B30; --alert-title:#C62828; }
-      .alert-group-yellow { --alert-color:#E5B400; --alert-title:#D99F00; }
-      .alert-group-green { --alert-color:#2563EB; --alert-title:#2563EB; }
-      .alert-business { display:flex; align-items:center; min-height:96px; padding:14px 22px; color:#001E79; background:#F1F4FA; border:1px solid #DCE2F3; border-left:0; border-radius:0 10px 10px 0; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
+      .alert-group { display:grid; grid-template-columns:325px 1fr; column-gap:10px; background:transparent; border:0; margin-bottom:12px; overflow:visible; }
+      .alert-business { display:flex; align-items:center; min-height:96px; padding:14px 22px; color:#001E79; background:#F1F4FA; border:1px solid #DCE2F3; border-radius:10px; text-align:left; font-size:1.7rem; font-weight:800; line-height:1.25; }
       .alert-list { display:flex; flex-direction:column; min-width:0; }
       .alert { display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:10px; flex:1; border:0; padding:0; margin:0; font-size:1.55rem; line-height:1.35; }
-      .alert-insight { display:flex; align-items:center; flex:1 1 96px; min-height:96px; color:#334155; background:#FFFFFF; border:1px solid #DCE2F3; border-radius:10px; padding:14px 18px; font-weight:400; }
+      .alert-insight { display:flex; align-items:center; flex:1 1 96px; min-height:96px; color:#334155; background:#FFFFFF; border:1px solid #DCE2F3; border-left:8px solid var(--insight-color); border-radius:10px; padding:14px 18px; font-weight:400; }
+      .alert-insight-red { --insight-color:#FF3B30; --alert-title:#C62828; }
+      .alert-insight-yellow { --insight-color:#E5B400; --alert-title:#D99F00; }
+      .alert-insight-blue { --insight-color:#2563EB; --alert-title:#2563EB; }
       .alert-insight-copy { display:inline; }
       .alert-insight-title { color:var(--alert-title); font-weight:800; }
       .alert-insight strong { color:inherit; font-weight:800; }
@@ -1308,6 +1336,7 @@ for business_unit in selected_units:
                     f"Revenue reached ${unit_metrics['revenue_actual']:.1f}M, "
                     f"{unit_metrics['revenue_vs_budget']:+.1%} versus target."
                 ),
+                "status": "Positive",
             }],
         })
     else:
@@ -1320,11 +1349,15 @@ for business_unit in selected_units:
         fallback_reviews.append({
             "business_unit": business_unit,
             "status": severity_to_status.get(str(alert["severity"]), "Caution"),
-            "insights": [{"title": str(alert["rule"]), "text": message}],
+            "insights": [{
+                "title": str(alert["rule"]),
+                "text": message,
+                "status": severity_to_status.get(str(alert["severity"]), "Caution"),
+            }],
         })
 
 period_review = generate_ai_period_review({
-    "version": 10,
+    "version": 11,
     "reporting_period": selection_label,
     "selected_business_units": list(selected_units),
     "overall_performance": overall_performance,
@@ -1364,27 +1397,27 @@ st.markdown(
     unsafe_allow_html=True,
 )
 review_by_unit = {item["business_unit"]: item for item in period_review["business_reviews"]}
-status_css = {"Critical": "red", "Caution": "yellow", "Positive": "green"}
+status_css = {"Critical": "red", "Caution": "yellow", "Positive": "blue"}
 for business_unit in selected_units:
     review = review_by_unit[business_unit]
     has_alert = not current_alerts.loc[current_alerts["business_unit"].eq(business_unit)].empty
     if has_alert:
-        alert_items = [
-            "<div class='alert-insight'>"
-            "<span class='alert-insight-copy'>"
-            f"<span class='alert-insight-title'>{escape(normalize_insight_label(insight['title']))}:</span> "
-            f"{format_insight_text_html(polish_dashboard_narrative(normalize_llm_sentence(insight['text'])))}</span></div>"
-            for insight in review["insights"]
-        ]
-        alert_status_class = status_css[review["status"]]
+        alert_items = []
+        for insight in review["insights"]:
+            insight_color = status_css[insight_display_status(insight)]
+            alert_items.append(
+                f"<div class='alert-insight alert-insight-{insight_color}'>"
+                "<span class='alert-insight-copy'>"
+                f"<span class='alert-insight-title'>{escape(normalize_insight_label(insight['title']))}:</span> "
+                f"{format_insight_text_html(polish_dashboard_narrative(normalize_llm_sentence(insight['text'])))}</span></div>"
+            )
     else:
-        alert_items = ["<div class='alert-insight'><span class='alert-insight-title'>No alert.</span></div>"]
-        alert_status_class = "green"
+        alert_items = ["<div class='alert-insight alert-insight-blue'><span class='alert-insight-title'>No alert.</span></div>"]
     alert_rows = [
         f"<div class='alert'>{''.join(alert_items)}</div>"
     ]
     st.markdown(
-        f"<div class='alert-group alert-group-{alert_status_class}'><div class='alert-business'>{escape(str(business_unit))}</div>"
+        f"<div class='alert-group'><div class='alert-business'>{escape(str(business_unit))}</div>"
         f"<div class='alert-list'>{''.join(alert_rows)}</div></div>",
         unsafe_allow_html=True,
     )
