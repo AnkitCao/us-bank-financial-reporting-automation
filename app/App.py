@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -203,22 +204,33 @@ def format_chart_period_range(frame: pd.DataFrame) -> str:
 def local_chart_summary(chart_key: str, values: dict) -> str:
     """Return a concise deterministic summary when an API key is unavailable."""
     if chart_key == "cost_to_income":
-        return f"{values['highest_unit']} recorded the highest cost-to-income ratio ({values['highest']:.1f}%) in {values['period']}, while {values['lowest_unit']} recorded the lowest ratio ({values['lowest']:.1f}%)."
+        gap = values["highest"] - values["lowest"]
+        return f"{values['highest_unit']} had the highest cost-to-income ratio ({values['highest']:.1f}%), {gap:.1f} points above {values['lowest_unit']}."
     if chart_key == "profit_margin":
-        return f"{values['highest_unit']} led {values['period']} profit margins ({values['highest']:.1f}%), finishing {values['variance']:+.1f} percentage points versus target."
+        return f"{values['highest_unit']} led profit margins ({values['highest']:.1f}%), {values['variance']:+.1f} points versus target."
     if chart_key == "revenue_trend":
-        return f"{values['unit']} recorded revenues (${values['latest']:.1f}M) in {values['period']}, a change ({values['change']:+.1f}%) from the prior month."
+        return f"{values['unit']} revenue reached ${values['latest']:.1f}M, changing {values['change']:+.1f}% from the prior month."
     if chart_key == "revenue_variance":
-        return f"Revenue variance (${abs(values['variance']):.1f}M) finished {'above' if values['variance'] >= 0 else 'below'} target, led by {values['driver']}."
+        return f"Revenue finished ${abs(values['variance']):.1f}M {'above' if values['variance'] >= 0 else 'below'} target, led by {values['driver']}."
     if chart_key == "expense_variance":
-        return f"{values['unit']} had the largest unfavorable expense variance (${values['variance']:.1f}M) above budget."
+        return f"{values['unit']} expense was ${values['variance']:.1f}M above budget, the largest unfavorable variance."
     if chart_key == "npl_ratio":
         direction = "increased" if values["latest"] > values["prior"] else "decreased"
-        return f"CRE NPL ratio ({values['latest']:.2f}%) {direction} and remained below the illustrative review threshold (1.50%)."
+        return f"CRE NPL ratio {direction} to {values['latest']:.1f}%, remaining below the illustrative 1.5% threshold."
     if chart_key == "loan_to_deposit":
         direction = "increased" if values["latest"] > values["prior"] else "decreased"
-        return f"Loan-to-deposit ratio ({values['latest']:.1f}%) {direction} in {values['period']}, indicating loan growth continued to outpace deposit funding."
-    return f"{values['largest_component']} share ({values['largest_share']:.1f}%) was the largest Capital Markets fee component in {values['period']}."
+        return f"Commercial Banking loan-to-deposit ratio {direction} to {values['latest']:.1f}%, reflecting loans relative to deposit funding."
+    return f"{values['largest_component']} was Capital Markets' largest fee component ({values['largest_share']:.1f}%)."
+
+
+def enforce_chart_summary(text: str, fallback: str) -> str:
+    """Accept only one short chart sentence; otherwise use the concise fallback."""
+    candidate = normalize_llm_sentence(text)
+    words = re.findall(r"\b[\w$%+.']+(?:-[\w$%+.']+)*\b", candidate)
+    sentence_marks = re.findall(r"[.!?]", candidate)
+    if candidate and len(words) <= 22 and len(candidate) <= 150 and len(sentence_marks) == 1:
+        return candidate
+    return normalize_llm_sentence(fallback)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -228,7 +240,7 @@ def generate_chart_summary(chart_key: str, summary_dict: dict) -> str:
     try:
         api_key = st.secrets["OPENAI_API_KEY"]
     except Exception:
-        return fallback
+        return enforce_chart_summary(fallback, fallback)
     try:
         from openai import OpenAI
 
@@ -236,22 +248,27 @@ def generate_chart_summary(chart_key: str, summary_dict: dict) -> str:
         response = client.responses.create(
             model=st.secrets.get("OPENAI_MODEL", "gpt-5-mini"),
             instructions=(
-                "Analyze all supplied records for this chart and choose its most decision-relevant pattern; do not follow a fixed sentence "
-                "template. Compare levels, period changes, target or budget gaps, and business differences where available. Write exactly one "
-                "concise factual CFO sentence. Treat calculated clean metrics as authoritative when raw rows contain deliberate quality issues. "
+                "Analyze all supplied records for this chart and choose only its most decision-relevant exception, trend, or implication. Treat "
+                "calculated clean metrics as authoritative when raw rows contain deliberate quality issues. Return only one complete, factual, "
+                "executive-friendly sentence with no label, quotation marks, explanation, heading, bullet, colon, or introductory phrase. The final "
+                "sentence must contain no more than 22 English words and no more than 150 characters including spaces. Mention each business unit "
+                "no more than once and normally mention only the most relevant unit unless comparison is essential. Include no more than two "
+                "numeric values. Prioritize the variance instead of repeating Actual, Budget, and Prior Year values. After naming a metric once, "
+                "use concise phrases such as above budget, below budget, above May, or above prior year. Do not repeatedly write long names such "
+                "as Actual Revenue, Budget Revenue, Actual Operating Expense, or Budget Operating Expense. Compare levels, period changes, target "
+                "or budget gaps, and business differences only where material. "
                 "Never mention, analyze, compare, or output Forecast. Use only Actual, Budget, Target, and Prior Year facts. Whenever a metric "
-                "name and its value appear together, write Metric Name (value), for example Operating Expense ($3.968M), never Metric Name "
-                "$3.968M. Translate snake_case fields into natural finance language and synthesize the figures rather than mechanically "
-                "listing field names. Format every displayed number to exactly one decimal place. Write a normal complete sentence ending "
-                "with a period. Do not use an em dash or en dash to append an explanation. "
-                "Use only supplied facts; do not recommend actions or describe your process."
+                "name and its value appear together, write natural business language. Translate snake_case fields and synthesize figures rather "
+                "than mechanically listing fields. Format every displayed number to exactly one decimal place. End with a period. Do not use an "
+                "em dash or en dash. Preserve supplied facts; never invent causes, explanations, thresholds, recommendations, or missing values. "
+                "Before returning, count the words and characters and rewrite until both limits are satisfied."
             ),
             input=json.dumps(sanitize_llm_evidence({"chart": chart_key, "filtered_data": summary_dict}), default=str),
             store=False,
         )
-        return normalize_llm_sentence(response.output_text) or fallback
+        return enforce_chart_summary(response.output_text, fallback)
     except Exception:
-        return fallback
+        return enforce_chart_summary(fallback, fallback)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -351,16 +368,78 @@ def base_layout(fig: go.Figure, title: str, subtitle: str) -> go.Figure:
 def add_chart_summary(fig: go.Figure, summary: str) -> go.Figure:
     """Add a visible conclusion as a dedicated third title line."""
     current_title = fig.layout.title.text or ""
-    summary_lines = textwrap.wrap(summary, width=62, break_long_words=False, break_on_hyphens=False)
+    summary_lines = textwrap.wrap(summary, width=105, break_long_words=False, break_on_hyphens=False)
     summary_html = "<br>".join(escape(line) for line in summary_lines[:2])
     fig.update_layout(
         title_text=(
             f"{current_title}<br>"
-            f"<span style='font-size:21px;color:#334155'><b>★ Summary:</b> {summary_html}</span>"
+            f"<span style='font-size:21px;color:#334155'><b>★</b> {summary_html}</span>"
         ),
         margin=dict(t=226 if len(summary_lines) > 1 else 198),
     )
     return fig
+
+
+def render_plotly_chart(fig: go.Figure, height: int) -> None:
+    """Render at the pre-scale card width so the 50% page transform stays crisp."""
+    # Streamlit measures Plotly after the app's 50% transform, which otherwise
+    # compresses a chart into half of its card. Render at double resolution inside
+    # an iframe, then scale that canvas once inside the iframe and once with the app.
+    chart_width = 1760
+    chart_height = round(height * 2.36)
+    frame_width = chart_width // 2
+    frame_height = chart_height // 2
+
+    def doubled(value: object) -> object:
+        return value * 2 if isinstance(value, (int, float)) else value
+
+    title_text = fig.layout.title.text or ""
+    title_text = re.sub(
+        r"font-size:(\d+(?:\.\d+)?)px",
+        lambda match: f"font-size:{float(match.group(1)) * 2:g}px",
+        title_text,
+    )
+    margin = fig.layout.margin
+    fig.update_layout(
+        width=chart_width,
+        height=chart_height,
+        autosize=False,
+        title_text=title_text,
+        title_font_size=doubled(fig.layout.title.font.size),
+        font_size=doubled(fig.layout.font.size),
+        legend_font_size=doubled(fig.layout.legend.font.size),
+        hoverlabel_font_size=doubled(fig.layout.hoverlabel.font.size),
+        margin=dict(
+            l=doubled(margin.l), r=doubled(margin.r),
+            t=doubled(margin.t), b=doubled(margin.b),
+        ),
+    )
+    for axis in [*fig.select_xaxes(), *fig.select_yaxes()]:
+        axis.tickfont.size = doubled(axis.tickfont.size)
+        axis.title.font.size = doubled(axis.title.font.size)
+    for annotation in fig.layout.annotations or ():
+        annotation.font.size = doubled(annotation.font.size)
+    for trace in fig.data:
+        if getattr(trace, "textfont", None) is not None:
+            trace.textfont.size = doubled(trace.textfont.size)
+        if getattr(trace, "line", None) is not None:
+            trace.line.width = doubled(trace.line.width)
+        if getattr(trace, "marker", None) is not None:
+            trace.marker.line.width = doubled(trace.marker.line.width)
+
+    chart_html = fig.to_html(
+        full_html=False,
+        include_plotlyjs="cdn",
+        config={"displayModeBar": False, "responsive": False},
+    )
+    components.html(
+        "<style>html,body{margin:0;overflow:hidden;background:#fff;}"
+        ".scaled-chart{width:1760px;height:auto;transform:scale(.5);transform-origin:top left;}"
+        f"</style><div class='scaled-chart'>{chart_html}</div>",
+        height=frame_height,
+        width=frame_width,
+        scrolling=False,
+    )
 
 
 def ordered_units(selected_units: list[str]) -> list[str]:
@@ -720,9 +799,10 @@ st.set_page_config(page_title="Automated Three-Business Performance Dashboard", 
 st.markdown(
     """
     <style>
-      html { zoom:50%; }
+      .stApp { width:200%; max-width:none !important; transform:scale(.5); transform-origin:top left; }
       html, body, .stApp, .stApp * { font-family:"Times New Roman", Times, serif !important; box-sizing:border-box; }
-      html, body, .stApp { background:#F5F7FA; max-width:100%; overflow-x:hidden; }
+      html, body, .stApp { background:#F5F7FA; overflow-x:hidden; }
+      html, body { max-width:100%; }
       .block-container { width:calc(100% - 4rem); max-width:100%; padding-top:2.5rem; padding-bottom:4rem; overflow-x:hidden; }
       [data-testid="stHorizontalBlock"] { width:100%; max-width:100%; gap:16px; }
       [data-testid="stColumn"] { min-width:0; }
@@ -827,8 +907,10 @@ st.markdown(
       .overview-toc a { display:block; color:#26384D !important; font-size:1.45rem; font-weight:700; line-height:1.3; padding:.42rem .35rem; text-decoration:none !important; border-radius:6px; }
       .overview-toc a:hover { color:#001E79 !important; background:#E9EEF8; }
       .section-anchor { position:relative; top:-75px; visibility:hidden; }
-      [data-testid="stPlotlyChart"] { width:100%; max-width:100%; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:0; margin-bottom:16px; box-shadow:0 2px 8px rgba(15,23,42,.035); overflow:visible !important; }
-      [data-testid="stPlotlyChart"] > div { width:100% !important; max-width:100% !important; overflow:visible !important; }
+      /* The page is intentionally shown at 50%. Plotly figures are rendered at
+         a fixed logical width in Python so their visible width still fills each card. */
+      [data-testid="stPlotlyChart"] { width:100% !important; max-width:100% !important; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:0; margin-bottom:16px; box-shadow:0 2px 8px rgba(15,23,42,.035); overflow:hidden !important; }
+      [data-testid="stPlotlyChart"] > div { width:100% !important; max-width:100% !important; overflow:hidden !important; }
       [data-testid="stPlotlyChart"] .scatterlayer .point,
       [data-testid="stPlotlyChart"] .barlayer .point,
       [data-testid="stPlotlyChart"] .waterfalllayer .point,
@@ -1040,14 +1122,14 @@ revenue_latest = latest_month.sort_values("revenue_actual", ascending=False).ilo
 revenue_history = trend_data.loc[trend_data["business_unit"] == revenue_latest["business_unit"]].sort_values("period")
 prior_revenue = float(revenue_history.iloc[-2]["revenue_actual"]) if len(revenue_history) > 1 else float(revenue_latest["revenue_actual"])
 revenue_summary = generate_chart_summary("revenue_trend", attach_evidence({
-    "_version": 3,
+    "_version": 5,
     "unit": revenue_latest["business_unit"], "latest": round(float(revenue_latest["revenue_actual"]), 1),
     "change": round((float(revenue_latest["revenue_actual"]) / prior_revenue - 1) * 100, 1),
     "period": latest_period.strftime("%B %Y"),
 }, raw_trend_evidence, trend_detail.loc[trend_detail["metric_type"] == "Revenue"]))
 
 efficiency_summary = generate_chart_summary("cost_to_income", attach_evidence({
-    "_version": 3,
+    "_version": 5,
     "highest_unit": efficiency_latest["business_unit"],
     "highest": round(float(efficiency_latest["cost_to_income_ratio_actual"] * 100), 1),
     "lowest_unit": efficiency_lowest["business_unit"],
@@ -1055,7 +1137,7 @@ efficiency_summary = generate_chart_summary("cost_to_income", attach_evidence({
     "period": latest_period.strftime("%B %Y"),
 }, raw_trend_evidence, trend_detail))
 margin_summary = generate_chart_summary("profit_margin", attach_evidence({
-    "_version": 4,
+    "_version": 5,
     "highest_unit": margin_period["business_unit"],
     "highest": round(float(margin_period["profit_margin_actual"] * 100), 1),
     "variance": round((float(margin_period["profit_margin_actual"]) - margin_target) * 100, 1),
@@ -1066,14 +1148,14 @@ variance_frame = selected_detail.loc[selected_detail["metric_type"] == "Revenue"
 variance_frame["variance"] = variance_frame["actual"] - variance_frame["budget"]
 largest_driver = variance_frame.loc[variance_frame["variance"].abs().idxmax(), "management_category"]
 variance_summary = generate_chart_summary("revenue_variance", attach_evidence({
-    "_version": 3,
+    "_version": 5,
     "variance": round(float(variance_frame["variance"].sum()), 1), "driver": str(largest_driver),
 }, raw_period_evidence, selected_detail.loc[selected_detail["metric_type"] == "Revenue"]))
 expense_frame = current.copy()
 expense_frame["variance"] = expense_frame["operating_expense_actual"] - expense_frame["operating_expense_budget"]
 largest_expense = expense_frame.sort_values("variance", ascending=False).iloc[0]
 expense_summary = generate_chart_summary("expense_variance", attach_evidence({
-    "_version": 3,
+    "_version": 5,
     "unit": largest_expense["business_unit"], "variance": round(float(max(largest_expense["variance"], 0)), 1),
 }, raw_period_evidence, selected_detail.loc[selected_detail["metric_type"] == "Expense"]))
 
@@ -1081,27 +1163,15 @@ st.markdown("<div id='total-trend' class='section-anchor'></div>", unsafe_allow_
 with st.expander("Total Trends", expanded=True):
     revenue_trend_view, efficiency_trend_view = st.columns(2)
     with revenue_trend_view:
-        st.plotly_chart(
-            add_chart_summary(trend_chart(trend_data, selected_units), revenue_summary).update_layout(height=600),
-            use_container_width=True, config={"displayModeBar": False},
-        )
+        render_plotly_chart(add_chart_summary(trend_chart(trend_data, selected_units), revenue_summary), 600)
     with efficiency_trend_view:
-        st.plotly_chart(
-            add_chart_summary(cost_income_trend_chart(trend_data, selected_units), efficiency_summary).update_layout(height=600),
-            use_container_width=True, config={"displayModeBar": False},
-        )
+        render_plotly_chart(add_chart_summary(cost_income_trend_chart(trend_data, selected_units), efficiency_summary), 600)
 
     variance_view, expense_view = st.columns(2)
     with variance_view:
-        st.plotly_chart(
-            add_chart_summary(waterfall_chart(selected_detail, chart_period_label), variance_summary).update_layout(height=560),
-            use_container_width=True, config={"displayModeBar": False},
-        )
+        render_plotly_chart(add_chart_summary(waterfall_chart(selected_detail, chart_period_label), variance_summary), 560)
     with expense_view:
-        st.plotly_chart(
-            add_chart_summary(expense_comparison_chart(current, chart_period_label), expense_summary).update_layout(height=560),
-            use_container_width=True, config={"displayModeBar": False},
-        )
+        render_plotly_chart(add_chart_summary(expense_comparison_chart(current, chart_period_label), expense_summary), 560)
 
 st.markdown("<div id='key-business-metrics' class='section-anchor'></div>", unsafe_allow_html=True)
 with st.expander("Key Business Metrics", expanded=True):
@@ -1114,7 +1184,7 @@ with st.expander("Key Business Metrics", expanded=True):
         if not cre.empty:
             values = cre["npl_ratio_actual"].dropna()
             summary_text = generate_chart_summary("npl_ratio", attach_evidence({
-                "_version": 3,
+                "_version": 5,
                 "business_unit": "Commercial Real Estate", "latest": round(float(values.iloc[-1] * 100), 2),
                 "prior": round(float(values.iloc[-2] * 100), 2) if len(values) > 1 else round(float(values.iloc[-1] * 100), 2),
                 "months": int(len(values)),
@@ -1129,7 +1199,7 @@ with st.expander("Key Business Metrics", expanded=True):
         if not banking.empty:
             values = banking["loan_to_deposit_ratio_actual"].dropna()
             summary_text = generate_chart_summary("loan_to_deposit", attach_evidence({
-                "_version": 3,
+                "_version": 5,
                 "business_unit": "Commercial Banking", "latest": round(float(values.iloc[-1] * 100), 1),
                 "prior": round(float(values.iloc[-2] * 100), 1) if len(values) > 1 else round(float(values.iloc[-1] * 100), 1),
                 "months": int(len(values)), "period": banking.iloc[-1]["period"].strftime("%B %Y"),
@@ -1152,7 +1222,7 @@ with st.expander("Key Business Metrics", expanded=True):
             latest_mix = markets.iloc[-1]
             largest_component = max(mix_columns, key=lambda label: latest_mix[mix_columns[label]])
             summary_text = generate_chart_summary("fee_revenue_mix", attach_evidence({
-                "_version": 4,
+                "_version": 5,
                 "business_unit": "Capital Markets", "largest_component": largest_component,
                 "largest_share": round(float(latest_mix[mix_columns[largest_component]] * 100), 1), "months": int(len(markets)),
                 "period": latest_mix["period"].strftime("%B %Y"),
@@ -1165,6 +1235,6 @@ with st.expander("Key Business Metrics", expanded=True):
         for column, figures in ((left_column, specialized_figures[:midpoint]), (right_column, specialized_figures[midpoint:])):
             with column:
                 for summary_text, figure in figures:
-                    st.plotly_chart(add_chart_summary(figure, summary_text), use_container_width=True, config={"displayModeBar": False})
+                    render_plotly_chart(add_chart_summary(figure, summary_text), int(figure.layout.height or 580))
     else:
         st.info("Select a business unit to view its specialized metric.")
