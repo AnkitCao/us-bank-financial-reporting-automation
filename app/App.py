@@ -1302,25 +1302,27 @@ st.markdown(
       [data-testid="stSidebar"] [data-baseweb="select"] * { font-size:1.65rem !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] > div { min-height:4rem !important; align-items:center !important; }
       [data-testid="stSidebar"] [data-baseweb="select"] input { line-height:2rem !important; }
-      /* BaseWeb calculates the portaled menu's x coordinate before the 50% page
-         zoom. Counter the resulting half-menu displacement with a width-relative
-         translation; this works for Month, Quarter, Year, and responsive widths. */
-      [data-baseweb="popover"]:has([role="option"]) {
-        translate:calc(50% + 18px) 0 !important;
+      /* All four reporting filters share one browser-native anchor. This keeps
+         BaseWeb's portaled menus/calendars attached to the active input even
+         when the sidebar scrolls, its content height changes, or option counts
+         differ. It intentionally replaces the old per-filter pixel offsets. */
+      .st-key-reporting_month [data-baseweb="select"],
+      .st-key-reporting_quarter [data-baseweb="select"],
+      .st-key-reporting_year [data-baseweb="select"],
+      .st-key-reporting_range [data-baseweb="input"] {
+        anchor-name:--reporting-filter;
       }
-      /* Month and Year menus contain different option counts, so their
-         zoomed BaseWeb portals lose different vertical offsets. Keep the
-         already-correct Quarter menu untouched and realign these two only. */
-      [data-baseweb="popover"]:has([role="option"]:nth-of-type(6)) {
-        translate:calc(50% + 18px) 538px !important;
-      }
-      [data-baseweb="popover"]:has([role="option"]:nth-of-type(2)):not(:has([role="option"]:nth-of-type(3))) {
-        translate:calc(50% + 18px) 269px !important;
-      }
-      /* The date-range calendar uses a separate portal and loses both axes
-         under page zoom. Align it below the fixed sidebar date input. */
+      [data-baseweb="popover"]:has([role="option"]),
       [data-baseweb="popover"]:has([data-baseweb="calendar"]) {
-        translate:calc(25% + 18px) 499px !important;
+        position:fixed !important;
+        position-anchor:--reporting-filter;
+        top:anchor(bottom) !important;
+        left:anchor(left) !important;
+        right:auto !important;
+        bottom:auto !important;
+        transform:none !important;
+        translate:0 0 !important;
+        margin-top:4px !important;
       }
       [data-baseweb="popover"] [role="option"],
       [data-baseweb="popover"] [role="option"] * {
