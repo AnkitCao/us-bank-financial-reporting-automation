@@ -845,6 +845,12 @@ def render_plotly_chart(fig: go.Figure, height: int) -> None:
         f"{chart_height // 2}px;background:#fff;border:1px solid #DCE3EC;border-radius:10px;"
         "box-shadow:0 4px 14px rgba(15,23,42,.08);overflow:hidden;}"
         ".scaled-chart{width:1728px;height:auto;transform:scale(.5);transform-origin:top left;}"
+        "/* Let pointer input reach Plotly's real SVG text nodes so chart "
+        "labels can be selected and copied without changing their appearance. */"
+        ".js-plotly-plot .draglayer{pointer-events:none!important;}"
+        ".js-plotly-plot svg text{"
+        "pointer-events:auto!important;cursor:text!important;"
+        "user-select:text!important;-webkit-user-select:text!important;}"
         f"</style><div class='chart-card'><div class='scaled-chart'>{chart_html}</div></div>",
         height=frame_height,
         width=frame_width,
